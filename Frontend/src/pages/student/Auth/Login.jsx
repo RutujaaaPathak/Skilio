@@ -8,14 +8,18 @@ const roleData = {
   admin: { label: 'Administrator Username', placeholder: 'e.g. sys-admin-01' }
 };
 
-export default function Login() {
-  const [role, setRole] = useState('student');
+export default function Login({ defaultRole = 'student' }) {
+  const [role, setRole] = useState(defaultRole);
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
   function handleSubmit(e) {
     e.preventDefault();
-    navigate('/student/dashboard');
+    if (role === 'teacher' || role === 'admin') {
+      navigate('/teacher/');
+    } else {
+      navigate('/student/dashboard');
+    }
   }
 
   return (

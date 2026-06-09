@@ -15,12 +15,14 @@ import Result from './pages/student/Exams/Result.jsx';
 import IntelligenceProfile from './pages/student/Analytics/IntelligenceProfile.jsx';
 import StudentPerformanceAnalytics from './pages/student/Analytics/StudentPerformanceAnalytics.jsx';
 import Settings from './pages/student/Settings/Settings.jsx';
+import TeacherPortal from './pages/teacher/TeacherPortal.jsx';
 
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<SplashScreen />} />
       <Route path="/student/auth/login" element={<Login />} />
+      <Route path="/teacher/auth/login" element={<Login defaultRole="teacher" />} />
       <Route path="/student/auth/signup" element={<Signup />} />
       <Route path="/student/dashboard" element={<StudentDashboard />} />
       <Route path="/student/exams" element={<UpcomingExams />} />
@@ -35,6 +37,7 @@ export default function App() {
       <Route path="/student/analytics/intelligence" element={<IntelligenceProfile />} />
       <Route path="/student/analytics/performance" element={<StudentPerformanceAnalytics />} />
       <Route path="/student/settings" element={<Settings />} />
+      <Route path="/teacher/*" element={<TeacherPortal />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
