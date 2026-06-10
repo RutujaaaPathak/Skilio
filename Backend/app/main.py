@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.database import engine, Base
-from app.routes import auth_router, questions_router
+from app.routes import auth_router, questions_router, exams_router, students_router
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -24,6 +24,8 @@ app.add_middleware(
 # ── Routes ──
 app.include_router(auth_router, prefix="/api")
 app.include_router(questions_router, prefix="/api")
+app.include_router(exams_router, prefix="/api")
+app.include_router(students_router, prefix="/api")
 
 # ── Health ──
 @app.get("/health")

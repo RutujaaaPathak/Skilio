@@ -33,6 +33,9 @@ export function AuthProvider({ children }) {
     setError(null);
     try {
       const result = await authService.signup(data);
+      localStorage.setItem('token', result.token);
+      localStorage.setItem('user', JSON.stringify(result.user));
+      setUser(result.user);
       return result;
     } catch (err) {
       setError(err.message);
@@ -40,6 +43,11 @@ export function AuthProvider({ children }) {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  const updateUser = useCallback((userData) => {
+    localStorage.setItem('user', JSON.stringify(userData));
+    setUser(userData);
   }, []);
 
   const logout = useCallback(() => {
@@ -50,7 +58,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, loading, error, login, signup, updateUser, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_current_user, require_teacher_or_admin
 from app.database import get_db
 from app.models.user import User
-from app.schemas.question import QuestionCreate, QuestionResponse, QuestionUpdate
+from app.schemas.question import AIGenerateRequest, AIGenerateResponse, QuestionBulkCreate, QuestionCreate, QuestionResponse, QuestionUpdate
 from app.services.question_service import QuestionService
 
 router = APIRouter(prefix="/questions", tags=["Questions"])
@@ -59,3 +59,21 @@ def delete_question(
     current_user: User = Depends(require_teacher_or_admin),
 ):
     QuestionService.delete(db, question_id, current_user)
+
+
+@router.post("/bulk", response_model=list[QuestionResponse], status_code=201)
+def bulk_create_questions(
+    body: QuestionBulkCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_teacher_or_admin),
+):
+    return QuestionService.create_bulk(db, body.questions, current_user)
+
+
+@router.post("/generate", response_model=AIGenerateResponse)
+def generate_questions(
+    body: AIGenerateRequest,
+    current_user: User = Depends(require_teacher_or_admin),
+):
+    questions = QuestionService.generate_with_ai(body)
+    return {"questions": questions}

@@ -11,6 +11,12 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     role: str = "student"
+    college: str | None = None
+    branch: str | None = None
+    division: str | None = None
+    year: str | None = None
+    phone: str | None = None
+    batch: str | None = None
 
     @field_validator("role")
     @classmethod
@@ -33,11 +39,27 @@ class UserLogin(BaseModel):
     role: str
 
 
+class UserUpdate(BaseModel):
+    name: str | None = None
+    college: str | None = None
+    branch: str | None = None
+    division: str | None = None
+    year: str | None = None
+    phone: str | None = None
+    batch: str | None = None
+
+
 class UserResponse(BaseModel):
     id: int
     name: str
     email: str
     role: str
+    college: str | None = None
+    branch: str | None = None
+    division: str | None = None
+    year: str | None = None
+    phone: str | None = None
+    batch: str | None = None
     is_active: bool
     created_at: datetime
 

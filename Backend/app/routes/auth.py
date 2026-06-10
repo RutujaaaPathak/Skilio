@@ -4,13 +4,13 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_current_user
 from app.database import get_db
 from app.models.user import User
-from app.schemas.auth import TokenResponse, UserCreate, UserLogin, UserResponse
+from app.schemas.auth import TokenResponse, UserCreate, UserLogin, UserResponse, UserUpdate
 from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-@router.post("/signup", response_model=UserResponse, status_code=201)
+@router.post("/signup", response_model=TokenResponse, status_code=201)
 def signup(body: UserCreate, db: Session = Depends(get_db)):
     return AuthService.register(db, body)
 
@@ -23,3 +23,12 @@ def login(body: UserLogin, db: Session = Depends(get_db)):
 @router.get("/me", response_model=UserResponse)
 def me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.put("/me")
+def update_profile(
+    body: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return AuthService.update_profile(db, current_user, body)

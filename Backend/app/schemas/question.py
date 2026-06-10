@@ -83,6 +83,66 @@ class QuestionUpdate(BaseModel):
         return v
 
 
+class QuestionBulkCreate(BaseModel):
+    questions: list[QuestionCreate]
+
+    @model_validator(mode="after")
+    def validate_bulk(self) -> "QuestionBulkCreate":
+        if not self.questions:
+            raise ValueError("At least one question is required")
+        if len(self.questions) > 500:
+            raise ValueError("Maximum 500 questions per bulk import")
+        return self
+
+
+class AIGenerateRequest(BaseModel):
+    subject: str
+    topic: str
+    difficulty: str = "medium"
+    question_types: list[str] = ["mcq"]
+    count: int = 5
+
+    @field_validator("difficulty")
+    @classmethod
+    def validate_difficulty(cls, v: str) -> str:
+        if v not in DIFFICULTIES:
+            raise ValueError(f"Difficulty must be one of {sorted(DIFFICULTIES)}")
+        return v
+
+    @field_validator("question_types")
+    @classmethod
+    def validate_question_types(cls, v: list[str]) -> list[str]:
+        invalid = [t for t in v if t not in QUESTION_TYPES]
+        if invalid:
+            raise ValueError(f"Invalid question types: {invalid}. Must be one of {sorted(QUESTION_TYPES)}")
+        if not v:
+            raise ValueError("At least one question type is required")
+        return v
+
+    @field_validator("count")
+    @classmethod
+    def validate_count(cls, v: int) -> int:
+        if v < 1 or v > 20:
+            raise ValueError("Count must be between 1 and 20")
+        return v
+
+
+class AIGeneratedQuestion(BaseModel):
+    subject: str
+    topic: str
+    difficulty: str
+    question_type: str
+    question_text: str
+    options: list[str] | None = None
+    correct_answer: str
+    marks: int = 1
+    explanation: str | None = None
+
+
+class AIGenerateResponse(BaseModel):
+    questions: list[AIGeneratedQuestion]
+
+
 class QuestionResponse(BaseModel):
     id: int
     teacher_id: int
