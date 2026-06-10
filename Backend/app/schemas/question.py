@@ -1,0 +1,100 @@
+from datetime import datetime
+from typing import Any
+
+from pydantic import BaseModel, field_validator, model_validator
+
+
+DIFFICULTIES = frozenset({"easy", "medium", "hard"})
+QUESTION_TYPES = frozenset({"mcq", "short_answer", "long_answer"})
+
+
+class QuestionCreate(BaseModel):
+    subject: str
+    topic: str
+    difficulty: str
+    question_type: str
+    question_text: str
+    options: list[str] | None = None
+    correct_answer: str
+    marks: int = 1
+    explanation: str | None = None
+
+    @field_validator("difficulty")
+    @classmethod
+    def validate_difficulty(cls, v: str) -> str:
+        if v not in DIFFICULTIES:
+            raise ValueError(f"Difficulty must be one of {sorted(DIFFICULTIES)}")
+        return v
+
+    @field_validator("question_type")
+    @classmethod
+    def validate_question_type(cls, v: str) -> str:
+        if v not in QUESTION_TYPES:
+            raise ValueError(f"Question type must be one of {sorted(QUESTION_TYPES)}")
+        return v
+
+    @field_validator("marks")
+    @classmethod
+    def validate_marks(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("Marks must be at least 1")
+        return v
+
+    @model_validator(mode="after")
+    def validate_mcq_options(self) -> "QuestionCreate":
+        if self.question_type == "mcq":
+            if not self.options or len(self.options) < 2:
+                raise ValueError("MCQ must have at least 2 options")
+            if len(set(self.options)) != len(self.options):
+                raise ValueError("MCQ options must be unique")
+        return self
+
+
+class QuestionUpdate(BaseModel):
+    subject: str | None = None
+    topic: str | None = None
+    difficulty: str | None = None
+    question_type: str | None = None
+    question_text: str | None = None
+    options: list[str] | None = None
+    correct_answer: str | None = None
+    marks: int | None = None
+    explanation: str | None = None
+
+    @field_validator("difficulty")
+    @classmethod
+    def validate_difficulty(cls, v: str | None) -> str | None:
+        if v is not None and v not in DIFFICULTIES:
+            raise ValueError(f"Difficulty must be one of {sorted(DIFFICULTIES)}")
+        return v
+
+    @field_validator("question_type")
+    @classmethod
+    def validate_question_type(cls, v: str | None) -> str | None:
+        if v is not None and v not in QUESTION_TYPES:
+            raise ValueError(f"Question type must be one of {sorted(QUESTION_TYPES)}")
+        return v
+
+    @field_validator("marks")
+    @classmethod
+    def validate_marks(cls, v: int | None) -> int | None:
+        if v is not None and v < 1:
+            raise ValueError("Marks must be at least 1")
+        return v
+
+
+class QuestionResponse(BaseModel):
+    id: int
+    teacher_id: int
+    subject: str
+    topic: str
+    difficulty: str
+    question_type: str
+    question_text: str
+    options: Any = None
+    correct_answer: str
+    marks: int
+    explanation: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

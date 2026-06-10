@@ -1,5 +1,4 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
-import SplashScreen from './pages/student/SplashScreen/SplashScreen.jsx';
 import Login from './pages/student/Auth/Login.jsx';
 import Signup from './pages/student/Auth/Signup.jsx';
 import StudentDashboard from './pages/student/Dashboard/StudentDashboard.jsx';
@@ -15,13 +14,17 @@ import Result from './pages/student/Exams/Result.jsx';
 import IntelligenceProfile from './pages/student/Analytics/IntelligenceProfile.jsx';
 import StudentPerformanceAnalytics from './pages/student/Analytics/StudentPerformanceAnalytics.jsx';
 import Settings from './pages/student/Settings/Settings.jsx';
+import TeacherPortal from './pages/teacher/TeacherPortal.jsx';
+import AdminRoutes from './routes/AdminRoutes.jsx';
 
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<SplashScreen />} />
+      <Route path="/" element={<Login />} />
       <Route path="/student/auth/login" element={<Login />} />
+      <Route path="/teacher/auth/login" element={<Login defaultRole="teacher" />} />
       <Route path="/student/auth/signup" element={<Signup />} />
+      <Route path="/teacher/auth/signup" element={<Signup defaultRole="teacher" />} />
       <Route path="/student/dashboard" element={<StudentDashboard />} />
       <Route path="/student/exams" element={<UpcomingExams />} />
       <Route path="/student/exams/instructions" element={<ExamInstructions />} />
@@ -35,6 +38,8 @@ export default function App() {
       <Route path="/student/analytics/intelligence" element={<IntelligenceProfile />} />
       <Route path="/student/analytics/performance" element={<StudentPerformanceAnalytics />} />
       <Route path="/student/settings" element={<Settings />} />
+      <Route path="/teacher/*" element={<TeacherPortal />} />
+      <Route path="/admin/*" element={<AdminRoutes />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
