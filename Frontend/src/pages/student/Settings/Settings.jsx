@@ -1,4 +1,15 @@
+import { useState } from 'react';
 import StudentLayout from '../../../components/StudentLayout.jsx';
+
+function Toggle({ label, checked: def = false }) {
+  const [checked, setChecked] = useState(def);
+  return (
+    <label className="flex items-center justify-between p-md bg-surface-container-low rounded-xl cursor-pointer">
+      <span className="font-bold text-on-surface">{label}</span>
+      <input type="checkbox" checked={checked} onChange={e => setChecked(e.target.checked)} className="w-5 h-5 text-secondary" />
+    </label>
+  );
+}
 
 export default function Settings() {
   return (
@@ -16,4 +27,3 @@ export default function Settings() {
     </StudentLayout>
   );
 }
-function Toggle({ label, checked }) { return <label className="flex items-center justify-between p-md bg-surface-container-low rounded-xl"><span className="font-bold text-on-surface">{label}</span><input type="checkbox" defaultChecked={checked} className="w-5 h-5 text-secondary" /></label>; }

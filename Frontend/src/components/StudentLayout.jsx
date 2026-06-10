@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import Icon from './Icon.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
 
 const links = [
   { to: '/student/dashboard', label: 'Dashboard', icon: 'dashboard' },
@@ -9,6 +10,10 @@ const links = [
 ];
 
 export default function StudentLayout({ title = 'Candidate Overview', children }) {
+  const { user, logout } = useAuth();
+  const displayName = user?.name || 'Student';
+  const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST';
+
   return (
     <div className="min-h-screen bg-surface text-on-surface">
       <aside className="hidden lg:flex h-screen w-64 fixed left-0 top-0 bg-surface-container-low flex-col py-base border-r border-outline-variant">
@@ -37,8 +42,13 @@ export default function StudentLayout({ title = 'Candidate Overview', children }
             ))}
           </ul>
         </nav>
-        <div className="px-gutter py-md mt-auto">
-          <button className="w-full py-sm px-md bg-primary text-on-primary rounded-lg text-label-md hover:opacity-90">Support</button>
+        <div className="px-gutter py-md mt-auto space-y-xs">
+          <button
+            onClick={() => { logout(); window.location.href = '/'; }}
+            className="w-full py-sm px-md bg-error-container text-error rounded-lg text-label-md hover:opacity-90 flex items-center justify-center gap-xs"
+          >
+            <Icon name="logout" /> Logout
+          </button>
         </div>
       </aside>
 
@@ -50,7 +60,7 @@ export default function StudentLayout({ title = 'Candidate Overview', children }
             <Icon name="help_outline" className="text-on-surface-variant" />
             <div className="flex items-center gap-sm bg-surface-container px-sm py-xs rounded-full">
               <Icon name="account_circle" />
-              <span className="text-label-md">Arjun Sharma</span>
+              <span className="text-label-md">{displayName}</span>
             </div>
           </div>
         </header>

@@ -1,3 +1,5 @@
+import { useAuth } from '../context/AuthContext.jsx';
+
 export function Icon({ children, className = '' }) {
   return <span className={`material-symbols-outlined ${className}`}>{children}</span>
 }
@@ -12,6 +14,7 @@ const nav = [
 ]
 
 export default function TeacherShell({ children, page, setPage, title = 'Teacher Portal', search = false }) {
+  const { logout } = useAuth();
   return <div className="min-h-screen bg-background text-on-surface">
     <aside className="teacher-sidebar h-screen w-64 fixed left-0 top-0 bg-surface-container-low border-r border-outline-variant flex flex-col py-md z-50">
       <div className="px-md mb-lg">
@@ -30,6 +33,7 @@ export default function TeacherShell({ children, page, setPage, title = 'Teacher
         <button onClick={() => setPage('createExam')} className="w-full mb-md py-sm px-md btn-primary text-sm">Create Exam</button>
         <button className="w-full flex items-center gap-sm px-md py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-highest"><Icon>account_circle</Icon><span className="text-sm">Profile</span></button>
         <button className="w-full flex items-center gap-sm px-md py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-highest"><Icon>settings</Icon><span className="text-sm">Settings</span></button>
+        <button onClick={() => { logout(); window.location.href = '/'; }} className="w-full flex items-center gap-sm px-md py-sm rounded-lg text-error hover:bg-error-container"><Icon>logout</Icon><span className="text-sm">Logout</span></button>
       </div>
     </aside>
     <header className="teacher-top flex justify-between items-center w-[calc(100%-16rem)] ml-64 px-lg h-16 sticky top-0 bg-surface border-b border-outline-variant z-40 backdrop-blur-md bg-white/95">

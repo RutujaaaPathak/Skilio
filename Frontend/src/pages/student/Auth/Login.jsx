@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Icon from '../../../components/Icon.jsx';
+import { useAuth } from '../../../context/AuthContext.jsx';
 
 const roleData = {
   student: { label: 'Student ID / Email', placeholder: 'e.g. 2024-EDU-001' },
@@ -8,17 +9,34 @@ const roleData = {
   admin: { label: 'Administrator Username', placeholder: 'e.g. sys-admin-01' }
 };
 
+const roleRoutes = {
+  student: '/student/dashboard',
+  teacher: '/teacher/',
+  admin: '/admin/dashboard',
+};
+
 export default function Login({ defaultRole = 'student' }) {
   const [role, setRole] = useState(defaultRole);
   const [showPassword, setShowPassword] = useState(false);
+  const [form, setForm] = useState({ identifier: '', password: '' });
+  const [formError, setFormError] = useState('');
+  const { login, loading, error } = useAuth();
   const navigate = useNavigate();
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
-    if (role === 'teacher' || role === 'admin') {
-      navigate('/teacher/');
-    } else {
-      navigate('/student/dashboard');
+    setFormError('');
+
+    if (!form.identifier.trim() || !form.password.trim()) {
+      setFormError('Please fill in all fields');
+      return;
+    }
+
+    try {
+      const result = await login({ role, email: form.identifier, password: form.password });
+      navigate(roleRoutes[result.user?.role] || roleRoutes[role]);
+    } catch {
+      setFormError(error || 'Invalid credentials. Please try again.');
     }
   }
 
@@ -74,12 +92,23 @@ export default function Login({ defaultRole = 'student' }) {
                 ))}
               </div>
 
+              {formError && (
+                <div className="mb-md rounded-lg bg-error-container p-sm text-label-md text-error font-bold">
+                  {formError}
+                </div>
+              )}
+
               <form className="space-y-md" onSubmit={handleSubmit}>
                 <div className="space-y-xs">
                   <label className="text-label-md font-bold text-on-surface-variant">{roleData[role].label}</label>
                   <div className="relative">
                     <Icon name="person" className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant" />
-                    <input className="w-full pl-12 pr-4 h-12 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" placeholder={roleData[role].placeholder} />
+                    <input
+                      className="w-full pl-12 pr-4 h-12 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md"
+                      placeholder={roleData[role].placeholder}
+                      value={form.identifier}
+                      onChange={e => setForm(f => ({ ...f, identifier: e.target.value }))}
+                    />
                   </div>
                 </div>
 
@@ -87,7 +116,13 @@ export default function Login({ defaultRole = 'student' }) {
                   <label className="text-label-md font-bold text-on-surface-variant">Secure Password</label>
                   <div className="relative">
                     <Icon name="lock" className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant" />
-                    <input className="w-full pl-12 pr-12 h-12 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" type={showPassword ? 'text' : 'password'} placeholder="••••••••" />
+                    <input
+                      className="w-full pl-12 pr-12 h-12 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md"
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      value={form.password}
+                      onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                    />
                     <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary">
                       <Icon name={showPassword ? 'visibility_off' : 'visibility'} />
                     </button>
@@ -102,12 +137,16 @@ export default function Login({ defaultRole = 'student' }) {
                   <a className="text-label-md font-bold text-secondary hover:underline" href="#">Forgot access?</a>
                 </div>
 
-                <button className="w-full h-12 bg-primary text-on-primary font-bold rounded-lg hover:opacity-90 flex items-center justify-center gap-xs" type="submit">
-                  Sign In to Secure Portal <Icon name="arrow_forward" />
+                <button
+                  className="w-full h-12 bg-primary text-on-primary font-bold rounded-lg hover:opacity-90 flex items-center justify-center gap-xs disabled:opacity-50"
+                  type="submit"
+                  disabled={loading}
+                >
+                  {loading ? 'Signing In...' : <>Sign In to Secure Portal <Icon name="arrow_forward" /></>}
                 </button>
               </form>
 
-              <p className="mt-md text-center text-label-md text-on-surface-variant">New here? <Link className="font-bold text-secondary" to="/student/auth/signup">Create account</Link></p>
+              <p className="mt-md text-center text-label-md text-on-surface-variant">New here? <Link className="font-bold text-secondary" to={`/${role}/auth/signup`}>Create account</Link></p>
             </div>
           </section>
         </div>
