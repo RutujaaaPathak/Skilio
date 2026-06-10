@@ -10,7 +10,7 @@ const roleRoutes = {
 
 export default function Signup({ defaultRole = 'student' }) {
   const [role, setRole] = useState(defaultRole);
-  const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '', college: '', branch: '', division: '', year: '' });
   const [formError, setFormError] = useState('');
   const { signup, loading, error } = useAuth();
   const navigate = useNavigate();
@@ -28,8 +28,16 @@ export default function Signup({ defaultRole = 'student' }) {
       return;
     }
 
+    const payload = { name: form.name, email: form.email, password: form.password, role };
+    if (role === 'student') {
+      payload.college = form.college.trim() || null;
+      payload.branch = form.branch.trim() || null;
+      payload.division = form.division.trim() || null;
+      payload.year = form.year.trim() || null;
+    }
+
     try {
-      await signup({ name: form.name, email: form.email, password: form.password, role });
+      await signup(payload);
       navigate(roleRoutes[role]);
     } catch {
       setFormError(error || 'Signup failed. Please try again.');
@@ -99,6 +107,28 @@ export default function Signup({ defaultRole = 'student' }) {
                   <label className="text-label-md font-bold text-on-surface-variant">Confirm Password</label>
                   <input className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" type="password" placeholder="Re-enter password" value={form.confirmPassword} onChange={e => setForm(f => ({ ...f, confirmPassword: e.target.value }))} />
                 </div>
+                {role === 'student' && (
+                  <>
+                    <div className="space-y-xs">
+                      <label className="text-label-md font-bold text-on-surface-variant">College</label>
+                      <input className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" placeholder="e.g. MIT College" value={form.college} onChange={e => setForm(f => ({ ...f, college: e.target.value }))} />
+                    </div>
+                    <div className="space-y-xs">
+                      <label className="text-label-md font-bold text-on-surface-variant">Branch</label>
+                      <input className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" placeholder="e.g. Computer Science" value={form.branch} onChange={e => setForm(f => ({ ...f, branch: e.target.value }))} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-sm">
+                      <div className="space-y-xs">
+                        <label className="text-label-md font-bold text-on-surface-variant">Division</label>
+                        <input className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" placeholder="e.g. A" value={form.division} onChange={e => setForm(f => ({ ...f, division: e.target.value }))} />
+                      </div>
+                      <div className="space-y-xs">
+                        <label className="text-label-md font-bold text-on-surface-variant">Year</label>
+                        <input className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" placeholder="e.g. 3rd Year" value={form.year} onChange={e => setForm(f => ({ ...f, year: e.target.value }))} />
+                      </div>
+                    </div>
+                  </>
+                )}
                 <button type="submit" disabled={loading} className="w-full h-12 bg-primary text-on-primary font-bold rounded-lg hover:opacity-90 disabled:opacity-50">
                   {loading ? 'Creating Account...' : 'Create Secure Account'}
                 </button>

@@ -32,3 +32,11 @@ Thumbs.db
 venv/
 .venv/
 env/
+
+# Cache / tooling
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.log

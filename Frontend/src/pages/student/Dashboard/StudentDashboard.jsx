@@ -1,9 +1,28 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import StudentLayout from '../../../components/StudentLayout.jsx';
 import PageFooter from '../../../components/PageFooter.jsx';
 import Icon from '../../../components/Icon.jsx';
+import { examService } from '../../../services/examService.js';
 
 export default function StudentDashboard() {
+  const [exams, setExams] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    examService.getMyExams()
+      .then(assignments => {
+        const exams = assignments.map(a => a.exam).filter(Boolean);
+        setExams(exams);
+      })
+      .catch(() => setExams([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const todayStr = new Date().toDateString();
+  const todayExams = exams.filter(e => new Date(e.start_time).toDateString() === todayStr && e.status === 'active');
+  const upcoming = exams.filter(e => new Date(e.start_time).toDateString() !== todayStr || e.status === 'scheduled');
+
   return (
     <StudentLayout title="Candidate Overview">
       <div className="p-gutter max-w-container-max mx-auto">
@@ -42,14 +61,47 @@ export default function StudentDashboard() {
             <div className="bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden">
               <div className="bg-primary px-gutter py-md flex justify-between items-center">
                 <h3 className="text-headline-sm text-white font-bold">Today's Exams</h3>
-                <span className="text-label-sm bg-secondary text-white px-md py-xs rounded-full">No exams</span>
+                <span className="text-label-sm bg-secondary text-white px-md py-xs rounded-full">{loading ? '...' : todayExams.length + ' exam(s)'}</span>
               </div>
-              <div className="p-gutter text-center text-on-surface-variant text-sm">No exams scheduled for today.</div>
+              <div className="divide-y divide-outline-variant">
+                {loading ? (
+                  <div className="p-gutter text-center text-on-surface-variant text-sm">Loading...</div>
+                ) : todayExams.length === 0 ? (
+                  <div className="p-gutter text-center text-on-surface-variant text-sm">No exams scheduled for today.</div>
+                ) : todayExams.map(exam => (
+                  <div key={exam.id} className="p-gutter flex items-center justify-between">
+                    <div>
+                      <p className="font-bold text-primary">{exam.title}</p>
+                      <p className="text-sm text-on-surface-variant">{exam.subject} • {new Date(exam.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {exam.duration_minutes} min</p>
+                    </div>
+                    <Link to="/student/exams/instructions" className="h-10 px-md bg-primary text-on-primary rounded-lg text-sm font-bold flex items-center hover:opacity-90">
+                      Start
+                    </Link>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div>
               <h3 className="text-headline-sm text-primary mb-md font-bold">Upcoming Exams</h3>
-              <div className="text-center text-on-surface-variant text-sm py-md">No upcoming exams.</div>
+              {loading ? (
+                <div className="text-center text-on-surface-variant text-sm py-md">Loading...</div>
+              ) : upcoming.length === 0 ? (
+                <div className="text-center text-on-surface-variant text-sm py-md">No upcoming exams.</div>
+              ) : (
+                <div className="grid md:grid-cols-2 gap-md">
+                  {upcoming.slice(0, 4).map(exam => (
+                    <div key={exam.id} className="border border-outline-variant rounded-xl p-md bg-surface-container-lowest">
+                      <p className="font-bold text-primary mb-xs">{exam.title}</p>
+                      <p className="text-sm text-on-surface-variant">{exam.subject} • {new Date(exam.start_time).toLocaleString()}</p>
+                      <p className="text-sm text-on-surface-variant">{exam.duration_minutes} min • {exam.total_marks} marks</p>
+                      <Link to="/student/exams/instructions" className="mt-sm inline-flex h-9 px-md items-center border border-outline-variant rounded-lg text-sm font-bold text-primary hover:bg-surface-container-high">
+                        View Details
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </section>
         </div>

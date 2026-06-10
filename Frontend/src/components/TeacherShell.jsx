@@ -7,6 +7,7 @@ export function Icon({ children, className = '' }) {
 const nav = [
   ['dashboard', 'Dashboard', 'dashboard'],
   ['assignment', 'Assessments', 'createExam'],
+  ['group_add', 'Assign Students', 'assignStudents'],
   ['database', 'Question Bank', 'questionBank'],
   ['map', 'Curriculum', 'syllabus'],
   ['analytics', 'Reports', 'reports'],
