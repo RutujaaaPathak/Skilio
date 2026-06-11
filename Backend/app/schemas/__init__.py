@@ -1,6 +1,6 @@
 from app.schemas.auth import TokenResponse, UserCreate, UserLogin, UserResponse
 from app.schemas.question import QuestionCreate, QuestionResponse, QuestionUpdate
-from app.schemas.exam import ExamAssignCreate, ExamAssignmentResponse, ExamCreate, ExamQuestionBulkCreate, ExamQuestionCreate, ExamQuestionResponse, ExamResponse, ExamUpdate, StudentExamResponse
+from app.schemas.exam import AnswerSyncItem, AnswerSyncRequest, AnswerSyncResponse, ExamAssignCreate, ExamAssignmentResponse, ExamCreate, ExamQuestionBulkCreate, ExamQuestionCreate, ExamQuestionResponse, ExamResponse, ExamUpdate, MySubmissionResponse, OfflinePackageResponse, OfflineQuestionResponse, StudentAnswerResponse, StudentExamResponse
 
 __all__ = [
     "UserCreate", "UserLogin", "UserResponse", "TokenResponse",
@@ -8,4 +8,7 @@ __all__ = [
     "ExamCreate", "ExamUpdate", "ExamResponse",
     "ExamQuestionCreate", "ExamQuestionBulkCreate", "ExamQuestionResponse",
     "ExamAssignCreate", "ExamAssignmentResponse", "StudentExamResponse",
+    "OfflinePackageResponse", "OfflineQuestionResponse",
+    "AnswerSyncItem", "AnswerSyncRequest", "AnswerSyncResponse",
+    "StudentAnswerResponse", "MySubmissionResponse",
 ]
