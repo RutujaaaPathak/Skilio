@@ -1,7 +1,9 @@
 import secrets
 from datetime import datetime, timezone
 
+# pyrefly: ignore [missing-import]
 from fastapi import HTTPException, status
+# pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Session
 
 from app.models.exam import Exam, ExamAssignment, ExamQuestion, ExamSession, StudentAnswer
@@ -173,7 +175,6 @@ class ExamService:
         )
 
     # ── Offline Package ──
-
     @staticmethod
     def get_offline_package(
         db: Session,
@@ -253,6 +254,7 @@ class ExamService:
             "downloaded_at": session.downloaded_at,
         }
 
+
     # ── Answer Sync ──
 
     @staticmethod
@@ -286,7 +288,6 @@ class ExamService:
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Device fingerprint mismatch. This session is bound to another device.",
                 )
-
         assignment = session.assignment
         if assignment.status == "submitted":
             raise HTTPException(
@@ -388,46 +389,68 @@ class ExamService:
             "total_questions": total,
             "answered_count": answered,
         }
+# ── Device Binding ──
 
-    # ── Device Binding ──
+@staticmethod
+def bind_device(
+    db: Session,
+    exam_id: int,
+    user: User,
+    session_token: str,
+    device_fingerprint: str,
+) -> dict:
+    session = db.query(ExamSession).filter(
+        ExamSession.session_token == session_token,
+    ).first()
 
-    @staticmethod
-    def bind_device(db: Session, exam_id: int, user: User, session_token: str, device_fingerprint: str) -> dict:
-        session = db.query(ExamSession).filter(
-            ExamSession.session_token == session_token,
-        ).first()
-        if not session:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
-        if session.student_id != user.id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Session does not belong to this student")
-        if session.exam_id != exam_id:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Session does not match this exam")
-        if session.device_fingerprint and session.device_fingerprint != device_fingerprint:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Session is already bound to a different device.",
-            )
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found",
+        )
 
-        from app.models.device import Device
-        device = db.query(Device).filter(
-            Device.user_id == user.id,
-            Device.device_fingerprint == device_fingerprint,
-        ).first()
-        if not device:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Device not registered. Register it first via POST /devices/register.",
-            )
+    if session.student_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Session does not belong to this student",
+        )
 
-        session.device_fingerprint = device_fingerprint
-        if session.status == "downloaded":
-            session.status = "started"
-        db.commit()
-        db.refresh(session)
+    if session.exam_id != exam_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Session does not match this exam",
+        )
 
-        return {
-            "message": "Device bound successfully",
-            "session_token": session.session_token,
-            "device_fingerprint": session.device_fingerprint,
-            "session_status": session.status,
-        }
+    if session.device_fingerprint and session.device_fingerprint != device_fingerprint:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Session is already bound to a different device.",
+        )
+
+    from app.models.device import Device
+
+    device = db.query(Device).filter(
+        Device.user_id == user.id,
+        Device.device_fingerprint == device_fingerprint,
+    ).first()
+
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Device not registered. Register it first via POST /devices/register.",
+        )
+
+    session.device_fingerprint = device_fingerprint
+
+    if session.status == "downloaded":
+        session.status = "started"
+
+    db.commit()
+    db.refresh(session)
+
+    return {
+        "message": "Device bound successfully",
+        "session_token": session.session_token,
+        "device_fingerprint": session.device_fingerprint,
+        "session_status": session.status,
+    }
