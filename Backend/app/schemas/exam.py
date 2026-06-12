@@ -1,5 +1,6 @@
 from datetime import datetime
 
+# pyrefly: ignore [missing-import]
 from pydantic import BaseModel, field_validator, model_validator
 
 
@@ -211,6 +212,7 @@ class AnswerSyncRequest(BaseModel):
     """Batch payload sent after offline exam completion."""
     session_token: str
     answers: list[AnswerSyncItem]
+    device_fingerprint: str | None = None
     final_submission: bool = False
 
     @model_validator(mode="after")

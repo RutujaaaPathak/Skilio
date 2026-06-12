@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 
+# pyrefly: ignore [missing-import]
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+# pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -76,6 +78,10 @@ class ExamSession(Base):
     assignment_id: Mapped[int] = mapped_column(Integer, ForeignKey("exam_assignments.id", ondelete="CASCADE"), nullable=False)
     session_token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="downloaded")
+  
+
+    device_fingerprint: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     downloaded_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

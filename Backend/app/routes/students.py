@@ -1,10 +1,13 @@
+# pyrefly: ignore [missing-import]
 from fastapi import APIRouter, Depends, Query, Request, status as http_status
+# pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, require_student, require_teacher_or_admin
 from app.database import get_db
 from app.models.user import User
 from app.schemas.auth import UserResponse
+from app.schemas.device import DeviceBindRequest
 from app.schemas.exam import AnswerSyncRequest, AnswerSyncResponse, MySubmissionResponse, OfflinePackageResponse, StudentExamResponse
 from app.services.exam_service import ExamService
 
@@ -84,6 +87,9 @@ def sync_answers(
     Set `final_submission: true` for the last sync to mark the
     exam as submitted. Subsequent syncs after submission are
     rejected unless a teacher reopens the assignment.
+    If the session has been device-bound, provide `device_fingerprint`
+    in the request body so the server can verify the request comes
+    from the same device.
     """
     return ExamService.sync_answers(
         db=db,
@@ -104,4 +110,29 @@ def get_my_submission(
         db=db,
         exam_id=exam_id,
         user=current_user,
+    )
+@router.post("/exams/{exam_id}/bind-device", status_code=http_status.HTTP_200_OK)
+def bind_device(
+    exam_id: int,
+    body: DeviceBindRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_student),
+):
+    """
+    Bind an exam session to a specific device.
+
+    Call this after the student starts the exam to lock the session
+    to their current device fingerprint. Subsequent sync requests
+    must include the matching fingerprint or they will be rejected.
+
+    Browser fingerprinting is a useful deterrent against casual
+    device switching but is not cryptographically secure. Combine
+    with IP monitoring and short token expiry for stronger protection.
+    """
+    return ExamService.bind_device(
+        db=db,
+        exam_id=exam_id,
+        user=current_user,
+        session_token=body.session_token,
+        device_fingerprint=body.device_fingerprint,
     )
