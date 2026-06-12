@@ -46,6 +46,8 @@ class ExamQuestion(Base):
 
 
 ASSIGNMENT_STATUSES = frozenset({"assigned", "started", "submitted", "reviewed"})
+SESSION_STATUSES = frozenset({"downloaded", "started", "submitted", "synced"})
+SYNC_STATUSES = frozenset({"pending", "synced"})
 
 
 class ExamAssignment(Base):
@@ -63,3 +65,48 @@ class ExamAssignment(Base):
     exam = relationship("Exam", back_populates="assignments")
     student = relationship("User", foreign_keys=[student_id], lazy="joined")
     assigner = relationship("User", foreign_keys=[assigned_by], lazy="joined")
+
+
+class ExamSession(Base):
+    __tablename__ = "exam_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    exam_id: Mapped[int] = mapped_column(Integer, ForeignKey("exams.id", ondelete="CASCADE"), nullable=False, index=True)
+    student_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    assignment_id: Mapped[int] = mapped_column(Integer, ForeignKey("exam_assignments.id", ondelete="CASCADE"), nullable=False)
+    session_token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="downloaded")
+    device_fingerprint: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    downloaded_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    device_info: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
+
+    exam = relationship("Exam", lazy="joined")
+    student = relationship("User", foreign_keys=[student_id], lazy="joined")
+    assignment = relationship("ExamAssignment", lazy="joined")
+    answers = relationship("StudentAnswer", back_populates="session", cascade="all, delete-orphan")
+
+
+class StudentAnswer(Base):
+    __tablename__ = "student_answers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    exam_session_id: Mapped[int] = mapped_column(Integer, ForeignKey("exam_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    exam_id: Mapped[int] = mapped_column(Integer, ForeignKey("exams.id", ondelete="CASCADE"), nullable=False)
+    student_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    question_id: Mapped[int] = mapped_column(Integer, ForeignKey("questions.id", ondelete="CASCADE"), nullable=False)
+    answer_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    selected_option: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    answer_type: Mapped[str] = mapped_column(String(20), nullable=False, default="text")
+    local_saved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    sync_status: Mapped[str] = mapped_column(String(10), nullable=False, default="pending")
+    word_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    edit_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    time_spent_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    session = relationship("ExamSession", back_populates="answers")
+    question = relationship("Question", lazy="joined")

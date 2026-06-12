@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 
 VALID_STATUSES = frozenset({"draft", "scheduled", "active", "completed"})
@@ -153,3 +153,104 @@ class StudentExamResponse(BaseModel):
     exam: ExamResponse | None = None
 
     model_config = {"from_attributes": True}
+
+
+# ── Offline Package Schemas ──
+
+class OfflineQuestionResponse(BaseModel):
+    """Question data sent in offline package – NO correct_answer included."""
+    id: int
+    subject: str
+    topic: str
+    difficulty: str
+    question_type: str
+    question_text: str
+    options: str | None = None
+    marks: int
+    explanation: str | None = None
+    order_index: int
+
+    model_config = {"from_attributes": True}
+
+
+class OfflinePackageResponse(BaseModel):
+    """
+    Full offline package for frontend to cache (IndexedDB / localStorage).
+
+    Frontend usage:
+      - Store this JSON blob in IndexedDB keyed by `session_token`
+      - Use `exam` fields to render the instructions / header
+      - Use `questions` to render the exam UI (answers are collected locally)
+      - Use `session_token` for all subsequent sync requests
+      - Use `assignment_id` to identify the assignment on sync
+      - Enforce `exam.tab_switch_limit`, `exam.camera_required`,
+        `exam.voice_verification_enabled` locally during the exam
+    """
+    exam: ExamResponse
+    questions: list[OfflineQuestionResponse]
+    assignment_id: int
+    session_token: str
+    downloaded_at: datetime
+
+
+# ── Answer Sync Schemas ──
+
+class AnswerSyncItem(BaseModel):
+    """A single answer from the frontend's offline store."""
+    question_id: int
+    answer_text: str | None = None
+    selected_option: str | None = None
+    answer_type: str = "text"
+    local_saved_at: datetime | None = None
+    word_count: int = 0
+    edit_count: int = 0
+    time_spent_seconds: int = 0
+
+
+class AnswerSyncRequest(BaseModel):
+    """Batch payload sent after offline exam completion."""
+    session_token: str
+    answers: list[AnswerSyncItem]
+    device_fingerprint: str | None = None
+    final_submission: bool = False
+
+    @model_validator(mode="after")
+    def check_at_least_one_field(self):
+        for i, a in enumerate(self.answers):
+            if not a.answer_text and not a.selected_option:
+                raise ValueError(f"answers[{i}]: either answer_text or selected_option is required")
+        return self
+
+
+class AnswerSyncResponse(BaseModel):
+    message: str
+    synced_count: int
+    session_status: str
+    submitted_at: datetime | None = None
+
+
+class StudentAnswerResponse(BaseModel):
+    """Safe answer view returned to the student (no correct_answer)."""
+    question_id: int
+    answer_text: str | None = None
+    selected_option: str | None = None
+    answer_type: str
+    word_count: int
+    edit_count: int
+    time_spent_seconds: int
+    sync_status: str
+    local_saved_at: datetime | None = None
+    synced_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class MySubmissionResponse(BaseModel):
+    """Full submission view for the student after syncing."""
+    exam_id: int
+    assignment_id: int
+    assignment_status: str
+    submitted_at: datetime | None = None
+    answers: list[StudentAnswerResponse]
+    total_questions: int
+    answered_count: int
