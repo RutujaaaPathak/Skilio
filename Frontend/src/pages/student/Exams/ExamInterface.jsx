@@ -1,14 +1,24 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Icon from '../../../components/Icon.jsx';
+import { useProctorMonitor } from '../../../hooks/useProctorMonitor.js';
 
 const questions = Array.from({ length: 40 }, (_, i) => i + 1);
 const options = ['Supervised AI monitoring', 'Open-book collaboration', 'Unrestricted browser access', 'Manual attendance only'];
 
-export default function ExamInterface() {
+export default function ExamInterface({ examId, examSessionId }) {
   const [current, setCurrent] = useState(1);
   const [selected, setSelected] = useState('');
   const time = useMemo(() => '01:42:15', []);
+
+  const monitoringEnabled = Boolean(examId && examSessionId);
+  useProctorMonitor({ examSessionId, examId, enabled: monitoringEnabled });
+
+  useEffect(() => {
+    if (monitoringEnabled && !document.fullscreenElement) {
+      document.documentElement.requestFullscreen?.().catch(() => {});
+    }
+  }, [monitoringEnabled]);
 
   return (
     <div className="bg-surface text-on-surface overflow-hidden min-h-screen">
@@ -20,7 +30,7 @@ export default function ExamInterface() {
             <span className="text-label-sm text-on-tertiary-fixed-variant tracking-wider uppercase">EXAM RUNNING OFFLINE SECURELY</span>
           </div>
           <div className="h-6 w-px bg-outline-variant mx-xs" />
-          <div className="flex flex-col"><span className="text-label-md font-bold">Skillo</span><span className="text-label-sm text-on-surface-variant">Session ID: ED-9921-X</span></div>
+          <div className="flex flex-col"><span className="text-label-md font-bold">Skillo</span><span className="text-label-sm text-on-surface-variant">Session ID: {examSessionId ?? 'ED-9921-X'}</span></div>
         </div>
         <div className="flex items-center gap-lg">
           <div className="flex flex-col items-center"><span className="text-label-sm text-on-surface-variant uppercase tracking-widest">Time Remaining</span><span className="text-headline-sm text-secondary font-bold">{time}</span></div>
