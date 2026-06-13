@@ -19,6 +19,7 @@ from app.schemas.exam import (
     StudentAnswerResponse,
     StudentExamResponse,
 )
+from app.schemas.proctor import ProctorEventCreate, ProctorEventResponse
 
 __all__ = [
     "UserCreate", "UserLogin", "UserResponse", "TokenResponse",
@@ -30,4 +31,5 @@ __all__ = [
     "AnswerSyncItem", "AnswerSyncRequest", "AnswerSyncResponse",
     "StudentAnswerResponse", "MySubmissionResponse",
     "DeviceCreate", "DeviceResponse", "DeviceBindRequest",
+    "ProctorEventCreate", "ProctorEventResponse",
 ]
