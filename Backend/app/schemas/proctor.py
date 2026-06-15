@@ -1,29 +1,49 @@
-import json
 from datetime import datetime
-from typing import Any
+from pydantic import BaseModel, Field, field_validator
 
-from pydantic import BaseModel, field_validator
-
-
-SEVERITY_MAP = {
-    "tab_switch": "medium",
-    "fullscreen_exit": "high",
-    "copy_paste": "high",
-    "multiple_faces": "critical",
-    "no_face": "high",
-    "window_blur": "medium",
-    "right_click": "low",
-}
-
-SEVERITY_LEVELS = frozenset({"low", "medium", "high", "critical"})
+VALID_EVENT_TYPES = frozenset({
+    "no_face_detected",
+    "multiple_faces_detected",
+    "face_mismatch",
+    "student_verified",
+    "camera_blocked",
+    "suspicious_movement",
+    "phone_detected",
+    "looking_away",
+    "tab_switch",
+    "fullscreen_exit",
+    "devtools_opened",
+    "copy_paste",
+    "right_click",
+    "multiple_faces",
+    "no_face",
+    "window_blur",
+})
 
 
 class ProctorEventCreate(BaseModel):
-    exam_session_id: int
-    exam_id: int
+    session_token: str
     event_type: str
+    confidence_score: float = 1.0
+    screenshot_url: str | None = None
     description: str | None = None
     metadata: dict | None = None
+
+    @field_validator("event_type")
+    @classmethod
+    def validate_event_type(cls, v: str) -> str:
+        if v not in VALID_EVENT_TYPES:
+            raise ValueError(
+                f"Invalid event_type '{v}'. Must be one of {sorted(VALID_EVENT_TYPES)}"
+            )
+        return v
+
+    @field_validator("confidence_score")
+    @classmethod
+    def validate_confidence_score(cls, v: float) -> float:
+        if not (0.0 <= v <= 1.0):
+            raise ValueError("confidence_score must be between 0.0 and 1.0 inclusive")
+        return v
 
 
 class ProctorEventResponse(BaseModel):
@@ -32,16 +52,33 @@ class ProctorEventResponse(BaseModel):
     exam_id: int
     student_id: int
     event_type: str
+    confidence_score: float | None = None
+    screenshot_url: str | None = None
     severity: str
     description: str | None = None
-    event_metadata: dict | None = None
+    metadata: dict | None = Field(default=None, validation_alias="metadata_")
     created_at: datetime
 
     model_config = {"from_attributes": True}
 
-    @field_validator("event_metadata", mode="before")
-    @classmethod
-    def parse_json(cls, v: Any) -> Any:
-        if isinstance(v, str):
-            return json.loads(v) if v else None
-        return v
+
+
+class ProctorEventResponseWithRisk(BaseModel):
+    event: ProctorEventResponse
+    session_risk_score: float
+
+
+class ProctorFrameAnalysisCreate(BaseModel):
+    session_token: str
+    screenshot_url: str
+
+
+class ProctorFrameAnalysisResponse(BaseModel):
+    phone_detected: bool
+    looking_away: bool
+    multiple_faces: bool
+    no_face: bool
+    camera_blocked: bool
+    description: str
+    session_risk_score: float
+

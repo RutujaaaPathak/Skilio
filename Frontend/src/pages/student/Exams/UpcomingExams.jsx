@@ -52,6 +52,11 @@ export default function UpcomingExams() {
                 <p className="text-sm text-on-surface-variant mb-md">{exam.total_marks} marks</p>
                 <Link
                   to="/student/exams/instructions"
+                  onClick={() => {
+                    localStorage.setItem('active_exam_id', exam.id);
+                    localStorage.removeItem('session_token');
+                    localStorage.removeItem('offline_package');
+                  }}
                   className="inline-flex h-10 px-md items-center bg-primary text-on-primary rounded-lg text-sm font-bold hover:opacity-90"
                 >
                   {exam.status === 'active' ? 'Start Exam' : 'View Details'}

@@ -255,3 +255,6 @@ class MySubmissionResponse(BaseModel):
     answers: list[StudentAnswerResponse]
     total_questions: int
     answered_count: int
+    score_percentage: float | None = None
+    correct_count: int | None = None
+    integrity_percentage: float | None = None

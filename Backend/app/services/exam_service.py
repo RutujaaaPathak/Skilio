@@ -374,11 +374,69 @@ class ExamService:
             StudentAnswer.exam_session_id == session.id,
         ).order_by(StudentAnswer.id).all()
 
-        total = db.query(ExamQuestion).filter(
-            ExamQuestion.exam_id == exam_id,
-        ).count()
+        # Get all exam questions to map marks and evaluate correct answers
+        exam_questions = db.query(ExamQuestion).filter(ExamQuestion.exam_id == exam_id).all()
+        eq_map = {eq.question_id: eq for eq in exam_questions}
 
+        total = len(exam_questions)
         answered = sum(1 for a in answers if a.answer_text or a.selected_option)
+
+        correct_count = 0
+        total_marks = 0
+        earned_marks = 0
+
+        for ans in answers:
+            eq = eq_map.get(ans.question_id)
+            if not eq:
+                continue
+            question = eq.question
+            if not question:
+                continue
+
+            total_marks += eq.marks
+
+            # Determine correctness of the student answer
+            is_correct = False
+            if question.question_type == "mcq":
+                if ans.answer_text and ans.answer_text.strip().lower() == question.correct_answer.strip().lower():
+                    is_correct = True
+                elif ans.selected_option and ans.selected_option.strip().lower() == question.correct_answer.strip().lower():
+                    is_correct = True
+                else:
+                    try:
+                        import json
+                        opts = json.loads(question.options) if question.options else []
+                        if question.correct_answer.isdigit():
+                            idx = int(question.correct_answer)
+                            if 0 <= idx < len(opts) and ans.answer_text and ans.answer_text.strip().lower() == opts[idx].strip().lower():
+                                is_correct = True
+                        if ans.selected_option and ans.selected_option.isdigit():
+                            sel_idx = int(ans.selected_option)
+                            if 0 <= sel_idx < len(opts) and opts[sel_idx].strip().lower() == question.correct_answer.strip().lower():
+                                is_correct = True
+                    except Exception:
+                        pass
+            else:
+                # Text/subjective or direct text matching
+                if ans.answer_text and ans.answer_text.strip().lower() == question.correct_answer.strip().lower():
+                    is_correct = True
+
+            if is_correct:
+                correct_count += 1
+                earned_marks += eq.marks
+
+        # If total_marks is 0, fall back to matching question counts
+        if total_marks > 0:
+            score_percentage = round((earned_marks / total_marks * 100), 2)
+        elif total > 0:
+            score_percentage = round((correct_count / total * 100), 2)
+        else:
+            score_percentage = 0.0
+
+        # Calculate Integrity Score (100% - risk_score)
+        from app.services.proctor_service import ProctorService
+        risk_score = ProctorService.calculate_risk_score(db, session.id)
+        integrity_percentage = max(0.0, 100.0 - risk_score)
 
         return {
             "exam_id": exam_id,
@@ -388,6 +446,9 @@ class ExamService:
             "answers": answers,
             "total_questions": total,
             "answered_count": answered,
+            "score_percentage": score_percentage,
+            "correct_count": correct_count,
+            "integrity_percentage": integrity_percentage,
         }
 # ── Device Binding ──
 

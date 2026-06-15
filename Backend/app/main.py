@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.database import engine, Base
-from app.routes import auth_router, devices_router, exams_router, proctor_router, questions_router, students_router, teacher_proctor_router
+from app.routes import auth_router, devices_router, exams_router, questions_router, students_router, proctor_router, teacher_proctor_router
 
 app = FastAPI(
     title=settings.APP_NAME,

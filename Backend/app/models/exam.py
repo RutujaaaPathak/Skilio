@@ -93,6 +93,7 @@ class ExamSession(Base):
     student = relationship("User", foreign_keys=[student_id], lazy="joined")
     assignment = relationship("ExamAssignment", lazy="joined")
     answers = relationship("StudentAnswer", back_populates="session", cascade="all, delete-orphan")
+    proctor_events = relationship("ProctorEvent", back_populates="session", cascade="all, delete-orphan")
 
 
 class StudentAnswer(Base):

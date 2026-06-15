@@ -1,35 +1,82 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_current_user, require_student, require_teacher_or_admin
+from app.core.dependencies import get_current_user, require_teacher_or_admin
 from app.database import get_db
 from app.models.user import User
-from app.schemas.proctor import ProctorEventCreate, ProctorEventResponse
+from app.models.exam import Exam
+from app.models.proctor_event import ProctorEvent
+from app.schemas.proctor import (
+    ProctorEventCreate,
+    ProctorEventResponse,
+    ProctorEventResponseWithRisk,
+    ProctorFrameAnalysisCreate,
+    ProctorFrameAnalysisResponse,
+)
 from app.services.proctor_service import ProctorService
 
-student_router = APIRouter(prefix="/proctor", tags=["Proctor"])
-teacher_router = APIRouter(prefix="/teacher", tags=["Teacher Proctor"])
+router = APIRouter(prefix="/proctor", tags=["Proctoring"])
+teacher_router = APIRouter(prefix="/teacher", tags=["Teacher Proctoring"])
 
 
-@student_router.post("/events", response_model=ProctorEventResponse, status_code=201)
-def log_proctor_event(
+@router.post(
+    "/events",
+    response_model=ProctorEventResponseWithRisk,
+    status_code=201,
+)
+def create_proctor_event(
     body: ProctorEventCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_student),
+    current_user: User = Depends(get_current_user),
 ):
-    """
-    Log a proctor event during an exam.
+    event = ProctorService.create_event(db, body, current_user)
+    risk_score = ProctorService.calculate_risk_score(db, event.exam_session_id)
+    return {
+        "event": event,
+        "session_risk_score": risk_score,
+    }
 
-    Automatically calculates severity based on event_type:
-      - tab_switch → medium
-      - fullscreen_exit → high
-      - copy_paste → high
-      - multiple_faces → critical
-      - no_face → high
-      - window_blur → medium
-      - right_click → low
-    """
-    return ProctorService.log_event(db=db, data=body, student=current_user)
+
+@router.post(
+    "/face-event",
+    response_model=ProctorEventResponseWithRisk,
+    status_code=201,
+)
+def create_face_event(
+    body: ProctorEventCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Log the event
+    event = ProctorService.create_event(db, body, current_user)
+
+    # Calculate the updated session risk score
+    risk_score = ProctorService.calculate_risk_score(db, event.exam_session_id)
+
+    return {
+        "event": event,
+        "session_risk_score": risk_score,
+    }
+
+
+@router.post(
+    "/analyze-frame",
+    response_model=ProctorFrameAnalysisResponse,
+    status_code=200,
+)
+def analyze_frame(
+    body: ProctorFrameAnalysisCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Call the frame analysis service
+    result = ProctorService.analyze_screenshot_frame(
+        db=db,
+        session_token=body.session_token,
+        screenshot_url=body.screenshot_url,
+        user=current_user,
+    )
+    return result
 
 
 @teacher_router.get(
@@ -38,12 +85,16 @@ def log_proctor_event(
 )
 def get_exam_proctor_events(
     exam_id: int,
-    severity: str | None = Query(None, description="Filter by severity: low, medium, high, critical"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_teacher_or_admin),
 ):
-    """Get all proctor events for an exam (teacher/admin only)."""
-    return ProctorService.get_exam_events(db=db, exam_id=exam_id, user=current_user, severity_filter=severity)
+    # Check if exam exists
+    exam = db.query(Exam).filter(Exam.id == exam_id).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+        
+    events = db.query(ProctorEvent).filter(ProctorEvent.exam_id == exam_id).all()
+    return events
 
 
 @teacher_router.get(
@@ -56,5 +107,20 @@ def get_student_proctor_events(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_teacher_or_admin),
 ):
-    """Get proctor events for a specific student in an exam (teacher/admin only)."""
-    return ProctorService.get_student_events(db=db, exam_id=exam_id, student_id=student_id, user=current_user)
+    # Check if exam exists
+    exam = db.query(Exam).filter(Exam.id == exam_id).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="Exam not found")
+        
+    # Check if student exists
+    student = db.query(User).filter(User.id == student_id, User.role == "student").first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+        
+    events = db.query(ProctorEvent).filter(
+        ProctorEvent.exam_id == exam_id,
+        ProctorEvent.student_id == student_id,
+    ).all()
+    return events
+
+
