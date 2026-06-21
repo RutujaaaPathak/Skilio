@@ -1,4 +1,6 @@
 # pyrefly: ignore [missing-import]
+import re
+
 from fastapi import APIRouter, Depends, Query, Request, status as http_status
 # pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Session
@@ -8,7 +10,7 @@ from app.database import get_db
 from app.models.user import User
 from app.schemas.auth import UserResponse
 from app.schemas.device import DeviceBindRequest
-from app.schemas.exam import AnswerSyncRequest, AnswerSyncResponse, MySubmissionResponse, OfflinePackageResponse, StudentExamResponse
+from app.schemas.exam import AnswerSyncRequest, AnswerSyncResponse, MySubmissionResponse, OfflinePackageResponse, StudentExamResponse, VoiceVerifyRequest, VoiceVerifyResponse
 from app.services.exam_service import ExamService
 
 router = APIRouter(prefix="/students", tags=["Students"])
@@ -111,6 +113,49 @@ def get_my_submission(
         exam_id=exam_id,
         user=current_user,
     )
+
+# ── Voice Verification ──
+
+CORE_WORDS = ["my", "identity", "is", "verified", "for", "secure", "exam"]
+MATCH_THRESHOLD = 6  # must match at least 6 of 7 core words IN ORDER
+
+
+def verify_phrase(transcript: str) -> tuple[int, int, bool]:
+    cleaned = re.sub(r'[^a-z0-9\s]', '', transcript.lower())
+    words = [w for w in cleaned.split() if w]
+    wi = 0
+    matched = 0
+    for w in words:
+        if wi < len(CORE_WORDS) and w == CORE_WORDS[wi]:
+            matched += 1
+            wi += 1
+        if matched >= MATCH_THRESHOLD:
+            break
+    passed = matched >= MATCH_THRESHOLD
+    return matched, len(CORE_WORDS), passed
+
+
+@router.post("/exams/{exam_id}/voice-verify", response_model=VoiceVerifyResponse)
+def voice_verify(
+    exam_id: int,
+    body: VoiceVerifyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_student),
+):
+    """
+    Verify that the student's spoken transcript matches the expected phrase.
+    Uses ordered subsequence matching to ensure words appear in the correct
+    sequence, preventing random keyword stuffing from passing.
+    """
+    matched, total, passed = verify_phrase(body.transcript)
+    return VoiceVerifyResponse(
+        matched=matched,
+        total=total,
+        passed=passed,
+        required=MATCH_THRESHOLD,
+    )
+
+
 @router.post("/exams/{exam_id}/bind-device", status_code=http_status.HTTP_200_OK)
 def bind_device(
     exam_id: int,

@@ -258,3 +258,17 @@ class MySubmissionResponse(BaseModel):
     score_percentage: float | None = None
     correct_count: int | None = None
     integrity_percentage: float | None = None
+
+
+# ── Voice Verification ──
+
+class VoiceVerifyRequest(BaseModel):
+    session_token: str
+    transcript: str
+
+
+class VoiceVerifyResponse(BaseModel):
+    matched: int
+    total: int
+    passed: bool
+    required: int

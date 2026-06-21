@@ -27,6 +27,10 @@ export default function PreExamSecurityCheck() {
   const [voiceProgress, setVoiceProgress] = useState(0);
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [faceIsAligned, setFaceIsAligned] = useState(false);
+  const [spokenText, setSpokenText] = useState('');
+  const [isUsingFallback, setIsUsingFallback] = useState(false);
+  const isVoiceRecordingRef = useRef(false);
+  const verifiedCountRef = useRef(0);
 
   // Simulation and Webcam States
   const [sessionToken, setSessionToken] = useState(localStorage.getItem('session_token') || '');
@@ -42,6 +46,8 @@ export default function PreExamSecurityCheck() {
   const webcamStreamRef = useRef(null);
   const faceTrackerTaskRef = useRef(null);
   const alignedCounterRef = useRef(0);
+  const recognitionRef = useRef(null);
+  const fallbackModeRef = useRef(false);
 
   const isCurrentlyFullscreen = () => {
     return !!(
@@ -199,7 +205,7 @@ export default function PreExamSecurityCheck() {
     }
   }, []);
 
-  const cleanupAll = () => {
+  function cleanupAll() {
     if (webcamStreamRef.current) {
       webcamStreamRef.current.getTracks().forEach(t => t.stop());
     }
@@ -212,7 +218,20 @@ export default function PreExamSecurityCheck() {
     if (faceTrackerTaskRef.current) {
       faceTrackerTaskRef.current.stop();
     }
-  };
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.onresult = null;
+        recognitionRef.current.onerror = null;
+        recognitionRef.current.onend = null;
+        recognitionRef.current.stop();
+      } catch {
+        // ignore
+      }
+      recognitionRef.current = null;
+    }
+    fallbackModeRef.current = false;
+    setIsUsingFallback(false);
+  }
 
   const handleStartExam = () => {
     if (!document.fullscreenElement) {
@@ -425,22 +444,92 @@ export default function PreExamSecurityCheck() {
     }
   }, [verifiedCount]);
 
+  // Keep refs in sync with state
+  useEffect(() => {
+    verifiedCountRef.current = verifiedCount;
+  }, [verifiedCount]);
+
+  useEffect(() => {
+    isVoiceRecordingRef.current = isVoiceRecording;
+  }, [isVoiceRecording]);
+
+  // Auto-trigger voice check when step 4 starts
+  useEffect(() => {
+    if (verifiedCount === 3) {
+      const timer = setTimeout(() => startVoiceCheck(), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [verifiedCount]);
+
   // Step 4: Voice Verification speaking check
   const startVoiceCheck = async () => {
-    if (verifiedCount !== 3) return;
+    if (verifiedCount !== 3 || recognitionRef.current) return;
+    isVoiceRecordingRef.current = true;
     setIsVoiceRecording(true);
-    setVoiceCheckMsg('Microphone listening... Speak the phrase above.');
-    addLog({ type: 'info', msg: 'Started voice verification recording...' });
+    setSpokenText('');
+    setVoiceProgress(0);
+    setIsUsingFallback(false);
+    fallbackModeRef.current = false;
+    setVoiceCheckMsg('Initializing microphone...');
+    addLog({ type: 'info', msg: 'Starting fresh voice verification...' });
+
+    let amplitudeInterval = null;
+    let recognition = null;
+    let speakingTimeCounter = 0;
+    let noSpeechTimeout = null;
+
+    const cleanupVoiceResources = () => {
+      if (noSpeechTimeout) {
+        clearTimeout(noSpeechTimeout);
+        noSpeechTimeout = null;
+      }
+      if (amplitudeInterval) {
+        clearInterval(amplitudeInterval);
+        amplitudeInterval = null;
+      }
+      if (recognition) {
+        try {
+          recognition.onresult = null;
+          recognition.onerror = null;
+          recognition.onend = null;
+          recognition.stop();
+        } catch {
+          // ignore
+        }
+        recognition = null;
+        recognitionRef.current = null;
+      }
+    };
 
     try {
+      // 1. Stop and cleanup any pre-existing streams/contexts to prevent audio device lockups
+      if (micStreamRef.current) {
+        try {
+          micStreamRef.current.getTracks().forEach(t => t.stop());
+        } catch {
+          // ignore
+        }
+        micStreamRef.current = null;
+      }
+      if (audioContextRef.current) {
+        try {
+          await audioContextRef.current.close();
+        } catch {
+          // ignore
+        }
+        audioContextRef.current = null;
+      }
+
+      // 2. Open fresh stream and audio context
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStreamRef.current = stream;
+      
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      const audioCtx = audioContextRef.current || new AudioContextClass();
+      const audioCtx = new AudioContextClass();
       audioContextRef.current = audioCtx;
       
-      let stream = micStreamRef.current;
-      if (!stream) {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        micStreamRef.current = stream;
+      if (audioCtx.state === 'suspended') {
+        await audioCtx.resume();
       }
       
       const source = audioCtx.createMediaStreamSource(stream);
@@ -450,51 +539,188 @@ export default function PreExamSecurityCheck() {
       
       const bufferLength = analyser.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
-      
-      let progress = 0;
-      const checkInterval = setInterval(() => {
+
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const speechRecSupported = !!SpeechRecognition;
+
+      // Start the amplitude tracker for visual bars and fallback volume check
+      amplitudeInterval = setInterval(() => {
+        if (!analyser) return;
         analyser.getByteFrequencyData(dataArray);
         let maxVal = 0;
         for (let i = 0; i < bufferLength; i++) {
           if (dataArray[i] > maxVal) maxVal = dataArray[i];
         }
         
-        // Voice amplitude threshold (e.g. 75 out of 255 to avoid hum/static false passes)
         const isSpeaking = maxVal > 75;
         setAudioLevel(Math.round(maxVal / 2.55));
         
-        if (isSpeaking) {
-          progress = Math.min(100, progress + 6);
-          setVoiceProgress(progress);
-        }
-        
-        if (progress >= 100) {
-          clearInterval(checkInterval);
-          setIsVoiceRecording(false);
-          setVoiceCheckMsg('Voice verification matched phrase successfully.');
-          setVerifiedCount(4);
-          addLog({ type: 'success', msg: 'Voice Verification Passed.' });
-          
-          // Cleanup audio
-          if (micStreamRef.current) {
-            micStreamRef.current.getTracks().forEach(t => t.stop());
-            micStreamRef.current = null;
+        // If we are in explicit fallback mode (or speech recognition is not supported at all)
+        if (fallbackModeRef.current || !speechRecSupported) {
+          if (isSpeaking) {
+            speakingTimeCounter += 60; // progress steps
+            const progress = Math.min(100, Math.round(speakingTimeCounter / 10));
+            setVoiceProgress(progress);
+            
+            if (progress >= 100) {
+              cleanupVoiceResources();
+              setIsVoiceRecording(false);
+              setVoiceCheckMsg('Voice verification matched phrase successfully (volume check).');
+              setVerifiedCount(4);
+              addLog({ type: 'success', msg: 'Voice Verification Passed (volume-based fallback).' });
+              
+              if (micStreamRef.current) {
+                micStreamRef.current.getTracks().forEach(t => t.stop());
+                micStreamRef.current = null;
+              }
+            }
           }
         }
       }, 100);
+
+      if (speechRecSupported) {
+        recognition = new SpeechRecognition();
+        recognitionRef.current = recognition;
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+
+        const coreWords = ["my", "identity", "is", "verified", "for", "secure", "exam"];
+        const matchThreshold = 6;
+
+        let backendDebounce = null;
+
+        const verifyWithBackend = (transcript) => {
+          if (backendDebounce) clearTimeout(backendDebounce);
+          backendDebounce = setTimeout(async () => {
+            const examId = localStorage.getItem('active_exam_id');
+            const token = localStorage.getItem('session_token');
+            if (!examId || !token || !transcript.trim()) return;
+            try {
+              const res = await api.post(`/students/exams/${examId}/voice-verify`, {
+                session_token: token,
+                transcript: transcript.trim(),
+              });
+              if (res.passed) {
+                cleanupVoiceResources();
+                setIsVoiceRecording(false);
+                setVoiceCheckMsg('Voice verification matched phrase successfully.');
+                setVerifiedCount(4);
+                addLog({ type: 'success', msg: 'Voice Verification Passed.' });
+                if (micStreamRef.current) {
+                  micStreamRef.current.getTracks().forEach(t => t.stop());
+                  micStreamRef.current = null;
+                }
+              }
+            } catch (err) {
+              console.warn('Backend voice verification failed:', err);
+            }
+          }, 600);
+        };
+
+        const countOrderedMatches = (transcript) => {
+          const words = transcript.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
+          let wi = 0;
+          for (const w of words) {
+            if (wi < coreWords.length && w === coreWords[wi]) wi++;
+          }
+          return wi;
+        };
+
+        recognition.onstart = () => {
+          addLog({ type: 'info', msg: 'Speech recognition engine is listening...' });
+          setVoiceCheckMsg('Microphone listening... Speak the phrase above.');
+        };
+
+        recognition.onresult = (event) => {
+          let interimTranscript = '';
+          let finalTranscript = '';
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+              finalTranscript += event.results[i][0].transcript;
+            } else {
+              interimTranscript += event.results[i][0].transcript;
+            }
+          }
+          const transcript = (finalTranscript + interimTranscript).trim();
+          setSpokenText(transcript);
+          setVoiceCheckMsg('Listening and transcribing...');
+
+          const matchedInOrder = countOrderedMatches(transcript);
+          const currentProgress = Math.min(100, Math.round((matchedInOrder / matchThreshold) * 100));
+          setVoiceProgress(currentProgress);
+
+          if (matchedInOrder >= 3) {
+            verifyWithBackend(transcript);
+          }
+        };
+
+        recognition.onerror = (e) => {
+          console.error("Speech recognition error:", e.error);
+          if (e.error !== 'no-speech') {
+            addLog({ type: 'error', msg: `Speech recognition error: ${e.error}. Switching to volume check.` });
+            fallbackModeRef.current = true;
+            setIsUsingFallback(true);
+            setVoiceCheckMsg('Speech recognition unavailable. Please speak to verify...');
+          } else {
+            addLog({ type: 'info', msg: 'Speech recognition detected no speech.' });
+          }
+        };
+
+        recognition.onend = () => {
+          if (verifiedCountRef.current < 4 && isVoiceRecordingRef.current && !fallbackModeRef.current) {
+            setTimeout(() => {
+              if (verifiedCountRef.current < 4 && isVoiceRecordingRef.current && !fallbackModeRef.current && recognitionRef.current) {
+                try {
+                  recognitionRef.current.start();
+                } catch (errRestart) {
+                  console.warn("Speech recognition restart failed:", errRestart);
+                }
+              }
+            }, 100);
+          }
+        };
+
+        recognition.start();
+
+        noSpeechTimeout = setTimeout(() => {
+          if (verifiedCountRef.current < 4 && isVoiceRecordingRef.current && !fallbackModeRef.current) {
+            addLog({ type: 'info', msg: 'No speech detected by STT after 8s, switching to volume-based check.' });
+            fallbackModeRef.current = true;
+            setIsUsingFallback(true);
+            setVoiceCheckMsg('Tap the mic button and speak clearly into the microphone...');
+          }
+        }, 8000);
+
+        const origOnResult = recognition.onresult;
+        recognition.onresult = (event) => {
+          clearTimeout(noSpeechTimeout);
+          origOnResult(event);
+        };
+
+        const origOnError = recognition.onerror;
+        recognition.onerror = (e) => {
+          clearTimeout(noSpeechTimeout);
+          origOnError(e);
+        };
+      } else {
+        addLog({ type: 'info', msg: 'Speech recognition not supported in this browser. Using volume-based check.' });
+        setVoiceCheckMsg('Speaking... (volume check active)');
+      }
+
     } catch (err) {
       console.error("Voice check recording failed:", err);
-      // Fallback
+      cleanupVoiceResources();
       setIsVoiceRecording(false);
       setVerifiedCount(4);
       setVoiceCheckMsg('Voice verified (bypass).');
     }
   };
 
-  const addLog = (entry) => {
+  function addLog(entry) {
     const timeStr = new Date().toLocaleTimeString();
     setLogs(prev => [{ time: timeStr, ...entry }, ...prev]);
-  };
+  }
 
   const handleAutoDetect = async () => {
     try {
@@ -686,6 +912,25 @@ export default function PreExamSecurityCheck() {
                                   </div>
                                   <span className="text-[10px] font-bold text-primary">{voiceProgress}%</span>
                                 </div>
+                                {spokenText && (
+                                  <p className="text-[11px] text-primary font-mono bg-surface p-xs rounded border border-outline-variant max-h-16 overflow-y-auto">
+                                    Heard: &ldquo;{spokenText}&rdquo;
+                                  </p>
+                                )}
+                                {isVoiceRecording && !isUsingFallback && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      fallbackModeRef.current = true;
+                                      setIsUsingFallback(true);
+                                      setVoiceCheckMsg('Bypassed speech engine. Please speak or make noise to verify.');
+                                      addLog({ type: 'info', msg: 'Manually switched to volume-based check.' });
+                                    }}
+                                    className="text-[10px] text-secondary hover:underline cursor-pointer text-center block mx-auto font-bold"
+                                  >
+                                    Having trouble? Switch to volume-based check
+                                  </button>
+                                )}
                                 <div className="flex items-end gap-1 h-8 justify-center bg-surface border rounded-md py-xs">
                                   {[15, 30, 20, 45, 25, 40, 10].map((h, i) => (
                                     <div key={i} className="w-2 bg-secondary rounded transition-all duration-100" style={{ height: `${Math.min(100, audioLevel * (h/20))}%` }} />
