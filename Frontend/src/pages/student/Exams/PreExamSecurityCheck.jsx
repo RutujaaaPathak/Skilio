@@ -24,10 +24,11 @@ export default function PreExamSecurityCheck() {
   // Real-time tracking values
   const [audioLevel, setAudioLevel] = useState(0);
   const [faceAlignedPercent, setFaceAlignedPercent] = useState(0);
-  const [voiceProgress, setVoiceProgress] = useState(0);
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [faceIsAligned, setFaceIsAligned] = useState(false);
+  const EXPECTED_PHRASE = "my identity is verified for this secure exam";
   const [spokenText, setSpokenText] = useState('');
+  const [voiceMatchStatus, setVoiceMatchStatus] = useState('idle');
   const [isUsingFallback, setIsUsingFallback] = useState(false);
   const isVoiceRecordingRef = useRef(false);
   const verifiedCountRef = useRef(0);
@@ -474,7 +475,6 @@ export default function PreExamSecurityCheck() {
     addLog({ type: 'info', msg: 'Starting fresh voice verification...' });
 
     let amplitudeInterval = null;
-    let recognition = null;
     let speakingTimeCounter = 0;
     let noSpeechTimeout = null;
 
@@ -487,22 +487,22 @@ export default function PreExamSecurityCheck() {
         clearInterval(amplitudeInterval);
         amplitudeInterval = null;
       }
-      if (recognition) {
+      if (recognitionRef.current) {
         try {
-          recognition.onresult = null;
-          recognition.onerror = null;
-          recognition.onend = null;
-          recognition.stop();
+          recognitionRef.current.onresult = null;
+          recognitionRef.current.onerror = null;
+          recognitionRef.current.onend = null;
+          recognitionRef.current.stop();
         } catch {
           // ignore
         }
-        recognition = null;
         recognitionRef.current = null;
       }
+      fallbackModeRef.current = false;
+      setIsUsingFallback(false);
     };
 
     try {
-      // 1. Stop and cleanup any pre-existing streams/contexts to prevent audio device lockups
       if (micStreamRef.current) {
         try {
           micStreamRef.current.getTracks().forEach(t => t.stop());
@@ -520,30 +520,28 @@ export default function PreExamSecurityCheck() {
         audioContextRef.current = null;
       }
 
-      // 2. Open fresh stream and audio context
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       micStreamRef.current = stream;
-      
+
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
       const audioCtx = new AudioContextClass();
       audioContextRef.current = audioCtx;
-      
+
       if (audioCtx.state === 'suspended') {
         await audioCtx.resume();
       }
-      
+
       const source = audioCtx.createMediaStreamSource(stream);
       const analyser = audioCtx.createAnalyser();
       analyser.fftSize = 256;
       source.connect(analyser);
-      
+
       const bufferLength = analyser.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
 
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      const speechRecSupported = !!SpeechRecognition;
+      const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const speechRecSupported = !!SpeechRecognitionAPI;
 
-      // Start the amplitude tracker for visual bars and fallback volume check
       amplitudeInterval = setInterval(() => {
         if (!analyser) return;
         analyser.getByteFrequencyData(dataArray);
@@ -551,24 +549,21 @@ export default function PreExamSecurityCheck() {
         for (let i = 0; i < bufferLength; i++) {
           if (dataArray[i] > maxVal) maxVal = dataArray[i];
         }
-        
         const isSpeaking = maxVal > 75;
         setAudioLevel(Math.round(maxVal / 2.55));
-        
-        // If we are in explicit fallback mode (or speech recognition is not supported at all)
+
         if (fallbackModeRef.current || !speechRecSupported) {
           if (isSpeaking) {
-            speakingTimeCounter += 60; // progress steps
+            speakingTimeCounter += 60;
             const progress = Math.min(100, Math.round(speakingTimeCounter / 10));
             setVoiceProgress(progress);
-            
+
             if (progress >= 100) {
               cleanupVoiceResources();
               setIsVoiceRecording(false);
               setVoiceCheckMsg('Voice verification matched phrase successfully (volume check).');
               setVerifiedCount(4);
               addLog({ type: 'success', msg: 'Voice Verification Passed (volume-based fallback).' });
-              
               if (micStreamRef.current) {
                 micStreamRef.current.getTracks().forEach(t => t.stop());
                 micStreamRef.current = null;
@@ -579,15 +574,16 @@ export default function PreExamSecurityCheck() {
       }, 100);
 
       if (speechRecSupported) {
-        recognition = new SpeechRecognition();
+        const recognition = new SpeechRecognitionAPI();
         recognitionRef.current = recognition;
-        recognition.continuous = true;
+        recognition.continuous = false;
         recognition.interimResults = true;
         recognition.lang = 'en-US';
 
         const coreWords = ["my", "identity", "is", "verified", "for", "secure", "exam"];
         const matchThreshold = 6;
 
+        let finalTranscript = '';
         let backendDebounce = null;
 
         const verifyWithBackend = (transcript) => {
@@ -634,14 +630,15 @@ export default function PreExamSecurityCheck() {
 
         recognition.onresult = (event) => {
           let interimTranscript = '';
-          let finalTranscript = '';
+          let finalPart = '';
           for (let i = event.resultIndex; i < event.results.length; ++i) {
             if (event.results[i].isFinal) {
-              finalTranscript += event.results[i][0].transcript;
+              finalPart += event.results[i][0].transcript;
             } else {
               interimTranscript += event.results[i][0].transcript;
             }
           }
+          finalTranscript += finalPart;
           const transcript = (finalTranscript + interimTranscript).trim();
           setSpokenText(transcript);
           setVoiceCheckMsg('Listening and transcribing...');
@@ -668,16 +665,26 @@ export default function PreExamSecurityCheck() {
         };
 
         recognition.onend = () => {
-          if (verifiedCountRef.current < 4 && isVoiceRecordingRef.current && !fallbackModeRef.current) {
-            setTimeout(() => {
-              if (verifiedCountRef.current < 4 && isVoiceRecordingRef.current && !fallbackModeRef.current && recognitionRef.current) {
-                try {
-                  recognitionRef.current.start();
-                } catch (errRestart) {
-                  console.warn("Speech recognition restart failed:", errRestart);
-                }
-              }
-            }, 100);
+          const spoken = finalTranscript.trim().toLowerCase().replace(/[^a-z0-9\s]/g, '');
+          const expected = EXPECTED_PHRASE.toLowerCase();
+          if (spoken === expected) {
+            cleanupVoiceResources();
+            setIsVoiceRecording(false);
+            setVoiceMatchStatus('matched');
+            setVoiceCheckMsg('Voice verification matched phrase successfully.');
+            setVerifiedCount(4);
+            addLog({ type: 'success', msg: 'Voice Verification Passed.' });
+            if (micStreamRef.current) {
+              micStreamRef.current.getTracks().forEach(t => t.stop());
+              micStreamRef.current = null;
+            }
+          } else if (spoken) {
+            setVoiceMatchStatus('mismatch');
+            setVoiceCheckMsg(`Phrase did not match. You said: "${finalTranscript.trim()}"`);
+            addLog({ type: 'error', msg: `Voice mismatch. Expected phrase, got: "${finalTranscript.trim()}"` });
+          } else {
+            setVoiceMatchStatus('idle');
+            setVoiceCheckMsg('No phrase detected. Try again.');
           }
         };
 
@@ -712,8 +719,8 @@ export default function PreExamSecurityCheck() {
       console.error("Voice check recording failed:", err);
       cleanupVoiceResources();
       setIsVoiceRecording(false);
-      setVerifiedCount(4);
-      setVoiceCheckMsg('Voice verified (bypass).');
+      setVoiceMatchStatus('idle');
+      setVoiceCheckMsg('Microphone access failed. Please allow mic permissions.');
     }
   };
 
@@ -898,24 +905,31 @@ export default function PreExamSecurityCheck() {
                               Read aloud: <span className="font-bold text-primary">&ldquo;My identity is verified for this secure exam.&rdquo;</span>
                             </p>
                             {!isVoiceRecording ? (
-                              <button 
-                                onClick={startVoiceCheck}
-                                className="w-full py-xs px-base bg-secondary text-primary font-bold rounded-lg text-xs hover:opacity-90 flex items-center justify-center gap-xs"
-                              >
-                                <Icon name="mic" className="text-sm" /> Start Speaking
-                              </button>
+                              <div className="flex flex-col gap-xs">
+                                {voiceMatchStatus === 'mismatch' && voiceTranscript && (
+                                  <div className="text-xs text-error bg-error/10 p-sm rounded-lg border border-error/30">
+                                    <span className="font-bold">You said:</span> "{voiceTranscript}"
+                                    <p className="mt-xs">Phrase did not match. Please try again.</p>
+                                  </div>
+                                )}
+                                <button 
+                                  onClick={startVoiceCheck}
+                                  className="w-full py-xs px-base bg-secondary text-primary font-bold rounded-lg text-xs hover:opacity-90 flex items-center justify-center gap-xs cursor-pointer"
+                                >
+                                  <Icon name="mic" className="text-sm" /> {voiceMatchStatus === 'mismatch' ? 'Try Again' : 'Start Speaking'}
+                                </button>
+                              </div>
                             ) : (
                               <div className="space-y-xs">
-                                <div className="flex items-center gap-base">
-                                  <div className="flex-1 w-full bg-surface-container-highest h-1.5 rounded-full overflow-hidden">
-                                    <div className="h-full bg-primary transition-all duration-300" style={{ width: `${voiceProgress}%` }} />
-                                  </div>
-                                  <span className="text-[10px] font-bold text-primary">{voiceProgress}%</span>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2 h-2 bg-error rounded-full animate-pulse" />
+                                  <span className="text-[10px] font-bold text-error uppercase">Listening...</span>
                                 </div>
                                 {spokenText && (
-                                  <p className="text-[11px] text-primary font-mono bg-surface p-xs rounded border border-outline-variant max-h-16 overflow-y-auto">
-                                    Heard: &ldquo;{spokenText}&rdquo;
-                                  </p>
+                                  <div className="text-xs bg-surface-container-high p-sm rounded-lg border border-outline-variant">
+                                    <span className="text-on-surface-variant">Heard: </span>
+                                    <span className="font-bold text-primary">&ldquo;{spokenText}&rdquo;</span>
+                                  </div>
                                 )}
                                 {isVoiceRecording && !isUsingFallback && (
                                   <button
@@ -931,10 +945,9 @@ export default function PreExamSecurityCheck() {
                                     Having trouble? Switch to volume-based check
                                   </button>
                                 )}
-                                <div className="flex items-end gap-1 h-8 justify-center bg-surface border rounded-md py-xs">
-                                  {[15, 30, 20, 45, 25, 40, 10].map((h, i) => (
-                                    <div key={i} className="w-2 bg-secondary rounded transition-all duration-100" style={{ height: `${Math.min(100, audioLevel * (h/20))}%` }} />
-                                  ))}
+                                <div className="w-full bg-surface-container-highest h-1 rounded-full overflow-hidden">
+                                  <div className="h-full bg-secondary transition-all" style={{ width: `${audioLevel}%` }} />
+                                </div>
                                 </div>
                               </div>
                             )}
