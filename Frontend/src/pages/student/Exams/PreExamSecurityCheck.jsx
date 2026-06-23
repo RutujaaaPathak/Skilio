@@ -24,9 +24,10 @@ export default function PreExamSecurityCheck() {
   // Real-time tracking values
   const [audioLevel, setAudioLevel] = useState(0);
   const [faceAlignedPercent, setFaceAlignedPercent] = useState(0);
-  const [voiceProgress, setVoiceProgress] = useState(0);
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [faceIsAligned, setFaceIsAligned] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState('');
+  const [voiceMatchStatus, setVoiceMatchStatus] = useState('idle');
 
   // Simulation and Webcam States
   const [sessionToken, setSessionToken] = useState(localStorage.getItem('session_token') || '');
@@ -425,69 +426,100 @@ export default function PreExamSecurityCheck() {
     }
   }, [verifiedCount]);
 
-  // Step 4: Voice Verification speaking check
+  const EXPECTED_PHRASE = "my identity is verified for this secure exam";
+  const recognitionRef = useRef(null);
+
+  // Step 4: Voice Verification using Speech-to-Text
   const startVoiceCheck = async () => {
     if (verifiedCount !== 3) return;
+
+    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognitionAPI) {
+      setVoiceCheckMsg('Speech recognition not supported in this browser.');
+      addLog({ type: 'error', msg: 'Speech recognition API unavailable. Using fallback.' });
+      setVerifiedCount(4);
+      return;
+    }
+
     setIsVoiceRecording(true);
-    setVoiceCheckMsg('Microphone listening... Speak the phrase above.');
-    addLog({ type: 'info', msg: 'Started voice verification recording...' });
+    setVoiceTranscript('');
+    setVoiceMatchStatus('listening');
+    setVoiceCheckMsg('Listening... Speak the phrase aloud.');
+    addLog({ type: 'info', msg: 'Started voice verification with STT...' });
 
     try {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      const audioCtx = audioContextRef.current || new AudioContextClass();
-      audioContextRef.current = audioCtx;
-      
       let stream = micStreamRef.current;
       if (!stream) {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         micStreamRef.current = stream;
       }
-      
-      const source = audioCtx.createMediaStreamSource(stream);
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 256;
-      source.connect(analyser);
-      
-      const bufferLength = analyser.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
-      
-      let progress = 0;
-      const checkInterval = setInterval(() => {
-        analyser.getByteFrequencyData(dataArray);
-        let maxVal = 0;
-        for (let i = 0; i < bufferLength; i++) {
-          if (dataArray[i] > maxVal) maxVal = dataArray[i];
+
+      const recognition = new SpeechRecognitionAPI();
+      recognitionRef.current = recognition;
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      let finalTranscript = '';
+
+      recognition.onresult = (event) => {
+        let interim = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          if (result.isFinal) {
+            finalTranscript += result[0].transcript;
+          } else {
+            interim += result[0].transcript;
+          }
         }
-        
-        // Voice amplitude threshold (e.g. 75 out of 255 to avoid hum/static false passes)
-        const isSpeaking = maxVal > 75;
-        setAudioLevel(Math.round(maxVal / 2.55));
-        
-        if (isSpeaking) {
-          progress = Math.min(100, progress + 6);
-          setVoiceProgress(progress);
+        const display = finalTranscript || interim;
+        setVoiceTranscript(display);
+        setAudioLevel(Math.min(100, Math.round((display.length / EXPECTED_PHRASE.length) * 100)));
+      };
+
+      recognition.onerror = (event) => {
+        console.error("Speech recognition error:", event.error);
+        if (event.error === 'no-speech') {
+          setVoiceCheckMsg('No speech detected. Try again.');
+        } else {
+          setVoiceCheckMsg(`STT error: ${event.error}. Please retry.`);
         }
-        
-        if (progress >= 100) {
-          clearInterval(checkInterval);
-          setIsVoiceRecording(false);
+        setIsVoiceRecording(false);
+        setVoiceMatchStatus('idle');
+        recognitionRef.current = null;
+      };
+
+      recognition.onend = () => {
+        const spoken = finalTranscript.trim().toLowerCase().replace(/[^a-z0-9\s]/g, '');
+        const expected = EXPECTED_PHRASE.toLowerCase();
+
+        if (spoken === expected) {
+          setVoiceMatchStatus('matched');
           setVoiceCheckMsg('Voice verification matched phrase successfully.');
           setVerifiedCount(4);
           addLog({ type: 'success', msg: 'Voice Verification Passed.' });
-          
-          // Cleanup audio
           if (micStreamRef.current) {
             micStreamRef.current.getTracks().forEach(t => t.stop());
             micStreamRef.current = null;
           }
+        } else if (spoken) {
+          setVoiceMatchStatus('mismatch');
+          setVoiceCheckMsg(`Phrase did not match. You said: "${finalTranscript.trim()}"`);
+          addLog({ type: 'error', msg: `Voice mismatch. Expected phrase, got: "${finalTranscript.trim()}"` });
+        } else {
+          setVoiceMatchStatus('idle');
+          setVoiceCheckMsg('No phrase detected. Try again.');
         }
-      }, 100);
+        setIsVoiceRecording(false);
+        recognitionRef.current = null;
+      };
+
+      recognition.start();
     } catch (err) {
       console.error("Voice check recording failed:", err);
-      // Fallback
       setIsVoiceRecording(false);
-      setVerifiedCount(4);
-      setVoiceCheckMsg('Voice verified (bypass).');
+      setVoiceMatchStatus('idle');
+      setVoiceCheckMsg('Microphone access failed. Please allow mic permissions.');
     }
   };
 
@@ -672,24 +704,34 @@ export default function PreExamSecurityCheck() {
                               Read aloud: <span className="font-bold text-primary">&ldquo;My identity is verified for this secure exam.&rdquo;</span>
                             </p>
                             {!isVoiceRecording ? (
-                              <button 
-                                onClick={startVoiceCheck}
-                                className="w-full py-xs px-base bg-secondary text-primary font-bold rounded-lg text-xs hover:opacity-90 flex items-center justify-center gap-xs"
-                              >
-                                <Icon name="mic" className="text-sm" /> Start Speaking
-                              </button>
+                              <div className="flex flex-col gap-xs">
+                                {voiceMatchStatus === 'mismatch' && voiceTranscript && (
+                                  <div className="text-xs text-error bg-error/10 p-sm rounded-lg border border-error/30">
+                                    <span className="font-bold">You said:</span> "{voiceTranscript}"
+                                    <p className="mt-xs">Phrase did not match. Please try again.</p>
+                                  </div>
+                                )}
+                                <button 
+                                  onClick={startVoiceCheck}
+                                  className="w-full py-xs px-base bg-secondary text-primary font-bold rounded-lg text-xs hover:opacity-90 flex items-center justify-center gap-xs cursor-pointer"
+                                >
+                                  <Icon name="mic" className="text-sm" /> {voiceMatchStatus === 'mismatch' ? 'Try Again' : 'Start Speaking'}
+                                </button>
+                              </div>
                             ) : (
                               <div className="space-y-xs">
-                                <div className="flex items-center gap-base">
-                                  <div className="flex-1 w-full bg-surface-container-highest h-1.5 rounded-full overflow-hidden">
-                                    <div className="h-full bg-primary transition-all duration-300" style={{ width: `${voiceProgress}%` }} />
-                                  </div>
-                                  <span className="text-[10px] font-bold text-primary">{voiceProgress}%</span>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2 h-2 bg-error rounded-full animate-pulse" />
+                                  <span className="text-[10px] font-bold text-error uppercase">Listening...</span>
                                 </div>
-                                <div className="flex items-end gap-1 h-8 justify-center bg-surface border rounded-md py-xs">
-                                  {[15, 30, 20, 45, 25, 40, 10].map((h, i) => (
-                                    <div key={i} className="w-2 bg-secondary rounded transition-all duration-100" style={{ height: `${Math.min(100, audioLevel * (h/20))}%` }} />
-                                  ))}
+                                {voiceTranscript && (
+                                  <div className="text-xs bg-surface-container-high p-sm rounded-lg border border-outline-variant">
+                                    <span className="text-on-surface-variant">Recognized: </span>
+                                    <span className="font-bold text-primary">{voiceTranscript}</span>
+                                  </div>
+                                )}
+                                <div className="w-full bg-surface-container-highest h-1 rounded-full overflow-hidden">
+                                  <div className="h-full bg-secondary transition-all" style={{ width: `${audioLevel}%` }} />
                                 </div>
                               </div>
                             )}

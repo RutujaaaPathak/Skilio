@@ -69,8 +69,23 @@ class ExamService:
         exam = db.query(Exam).filter(Exam.id == exam_id).first()
         if not exam:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exam not found")
-        if user.role not in ("admin",) and exam.teacher_id != user.id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this exam")
+        if user.role == "admin":
+            return exam
+        if user.role == "teacher":
+            if exam.teacher_id != user.id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have access to this exam")
+            return exam
+        # Student — check if assigned
+        assignment = (
+            db.query(ExamAssignment)
+            .filter(
+                ExamAssignment.exam_id == exam_id,
+                ExamAssignment.student_id == user.id,
+            )
+            .first()
+        )
+        if not assignment:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not assigned to this exam")
         return exam
 
     @staticmethod
