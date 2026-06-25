@@ -51,6 +51,8 @@ class ProctorEventResponse(BaseModel):
     exam_session_id: int
     exam_id: int
     student_id: int
+    student_name: str = ""
+    student_email: str = ""
     event_type: str
     confidence_score: float | None = None
     screenshot_url: str | None = None
@@ -81,4 +83,22 @@ class ProctorFrameAnalysisResponse(BaseModel):
     camera_blocked: bool
     description: str
     session_risk_score: float
+
+
+class ProctorRiskReportResponse(BaseModel):
+    id: int
+    exam_session_id: int
+    exam_id: int
+    student_id: int
+    student_name: str
+    student_email: str
+    total_events: int
+    low_count: int
+    medium_count: int
+    high_count: int
+    critical_count: int
+    risk_score: float
+    risk_level: str
+    summary: str | None = None
+    updated_at: datetime
 
