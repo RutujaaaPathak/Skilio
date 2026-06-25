@@ -1,3 +1,4 @@
+import re
 import secrets
 from datetime import datetime, timezone
 
@@ -9,6 +10,12 @@ from sqlalchemy.orm import Session
 from app.models.exam import Exam, ExamAssignment, ExamQuestion, ExamSession, StudentAnswer
 from app.models.user import User
 from app.schemas.exam import AnswerSyncRequest, ExamCreate, ExamQuestionBulkCreate, ExamUpdate
+
+
+def _words_match(student_answer: str, correct_answer: str) -> bool:
+    student_words = re.findall(r"[a-zA-Z0-9]+", student_answer.lower())
+    correct_words = re.findall(r"[a-zA-Z0-9]+", correct_answer.lower())
+    return student_words == correct_words
 
 
 class ExamService:
@@ -432,8 +439,8 @@ class ExamService:
                     except Exception:
                         pass
             else:
-                # Text/subjective or direct text matching
-                if ans.answer_text and ans.answer_text.strip().lower() == question.correct_answer.strip().lower():
+                # Text/subjective or direct text matching – compare word-by-word ignoring case
+                if ans.answer_text and _words_match(ans.answer_text, question.correct_answer):
                     is_correct = True
 
             if is_correct:

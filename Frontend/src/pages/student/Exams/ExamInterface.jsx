@@ -12,7 +12,7 @@ export default function ExamInterface() {
   const [timeRemaining, setTimeRemaining] = useState(3600); // 1 hour default
   const [user, setUser] = useState(null);
 
-  // Load user profile and offline exam package on mount
+  // Load user profile, offline exam package, and persisted warning count on mount
   useEffect(() => {
     const userStr = localStorage.getItem('user');
     if (userStr) {
@@ -21,6 +21,12 @@ export default function ExamInterface() {
       } catch (e) {
         console.error("Failed to parse user:", e);
       }
+    }
+
+    const saved = parseInt(localStorage.getItem('exam_warning_count') || '0', 10);
+    if (saved > 0) {
+      warningCountRef.current = saved;
+      setWarningCount(saved);
     }
 
     const pkgStr = localStorage.getItem('offline_package');
@@ -86,11 +92,33 @@ export default function ExamInterface() {
   const trackerTaskRef = useRef(null);
   const analysisIntervalRef = useRef(null);
   
-  // Counter refs to smooth warnings
+  // ── Gaze Detection Configuration ──
+  // All thresholds are normalised to [0,1] relative to video dimensions.
+  // tracking.js face rectangles are noisy, so we use only coarse position
+  // with extreme dead zones to avoid false positives.
+  const PROCTOR_CFG = {
+    SMOOTHING_ALPHA: 0.06,
+    DEAD_ZONE_X: 0.20,
+    DEAD_ZONE_Y: 0.16,
+    THRESHOLD_X: 0.45,
+    THRESHOLD_Y: 0.35,
+    FRAMES_AWAY: 90,
+    FRAMES_BACK: 30,
+    WARNING_COOLDOWN_MS: 10000,
+  };
+
   const noFaceTimerRef = useRef(0);
   const lookingAwayTimerRef = useRef(0);
   const multipleFacesTimerRef = useRef(0);
   const warningCountRef = useRef(0);
+  const lastEventTimeRef = useRef({});  // cooldown per event type
+
+  const smoothedPosRef = useRef({ x: 0.5, y: 0.5 });
+  const awayCounterRef = useRef(0);
+  const backCounterRef = useRef(0);
+  const gazeAwayRef = useRef(false);
+  const lastWarnRef = useRef(0);
+  const [activeWarning, setActiveWarning] = useState(null); // { reason, count, max }
 
   const isCurrentlyFullscreen = () => {
     return !!(
@@ -112,7 +140,7 @@ export default function ExamInterface() {
       if (isFull) {
         hasBeenFullscreenRef.current = true;
       } else if (hasBeenFullscreenRef.current) {
-        endExamSecurityViolation("fullscreen_exit", "Fullscreen exited during exam");
+        handleSecurityViolation("fullscreen_exit", "Fullscreen mode was exited.");
       }
     };
 
@@ -228,27 +256,62 @@ export default function ExamInterface() {
                 setProctorStatus(prev => ({ ...prev, faceVisible: true, faceCount: 1 }));
 
                 const rect = data[0];
-                const videoW = videoRef.current?.videoWidth || 320;
-                const videoH = videoRef.current?.videoHeight || 240;
-                const faceCx = rect.x + rect.width / 2;
-                const faceCy = rect.y + rect.height / 2;
-                const targetCx = videoW / 2;
-                const targetCy = videoH / 2;
+                const vw = videoRef.current?.videoWidth || 320;
+                const vh = videoRef.current?.videoHeight || 240;
 
-                // Distance from center check (gaze/looking away heuristic) - relaxed for specs/headphones
-                const maxGazeDist = videoW * 0.32; 
-                const dist = Math.sqrt(Math.pow(faceCx - targetCx, 2) + Math.pow(faceCy - targetCy, 2));
+                const faceCx = (rect.x + rect.width / 2) / vw;
+                const faceCy = (rect.y + rect.height / 2) / vh;
 
-                if (dist > maxGazeDist) {
-                  lookingAwayTimerRef.current += 1;
-                  if (lookingAwayTimerRef.current >= 25) { // ~5 seconds of looking away
-                    setProctorStatus(prev => ({ ...prev, gazeOk: false }));
-                    triggerViolation("Please look directly at the exam screen.", "looking_away", 0.65);
-                    lookingAwayTimerRef.current = 0;
-                  }
+                const a = PROCTOR_CFG.SMOOTHING_ALPHA;
+                const p = smoothedPosRef.current;
+                const sx = p.x + a * (faceCx - p.x);
+                const sy = p.y + a * (faceCy - p.y);
+                smoothedPosRef.current = { x: sx, y: sy };
+
+                const ox = sx - 0.5;
+                const oy = sy - 0.5;
+
+                const dzx = PROCTOR_CFG.DEAD_ZONE_X;
+                const dzy = PROCTOR_CFG.DEAD_ZONE_Y;
+                const tx  = PROCTOR_CFG.THRESHOLD_X;
+                const ty  = PROCTOR_CFG.THRESHOLD_Y;
+
+                const awayX = Math.abs(ox) > dzx && Math.abs(ox) > tx;
+                const awayY = Math.abs(oy) > dzy && Math.abs(oy) > ty;
+                const lookingAway = awayX || awayY;
+
+                if (lookingAway) {
+                  backCounterRef.current = 0;
+                  awayCounterRef.current += 1;
                 } else {
-                  lookingAwayTimerRef.current = 0;
+                  awayCounterRef.current = 0;
+                  backCounterRef.current += 1;
+                }
+
+                if (awayCounterRef.current >= PROCTOR_CFG.FRAMES_AWAY && !gazeAwayRef.current) {
+                  gazeAwayRef.current = true;
+                  setProctorStatus(prev => ({ ...prev, gazeOk: false }));
+                  const now = Date.now();
+                  if (now - lastWarnRef.current >= PROCTOR_CFG.WARNING_COOLDOWN_MS) {
+                    lastWarnRef.current = now;
+                    triggerViolation("Please look directly at the exam screen.", "looking_away", 0.65);
+                  }
+                }
+
+                if (backCounterRef.current >= PROCTOR_CFG.FRAMES_BACK && gazeAwayRef.current) {
+                  gazeAwayRef.current = false;
                   setProctorStatus(prev => ({ ...prev, gazeOk: true }));
+                }
+
+                // eslint-disable-next-line no-constant-condition
+                if (false) {
+                  console.debug(
+                    `[GAZE] raw=(${faceCx.toFixed(3)},${faceCy.toFixed(3)})`,
+                    `sm=(${sx.toFixed(3)},${sy.toFixed(3)})`,
+                    `away=${awayCounterRef.current}`,
+                    `back=${backCounterRef.current}`,
+                    `state=${gazeAwayRef.current ? 'AWAY' : 'OK'}`,
+                  );
                 }
               }
             });
@@ -302,13 +365,13 @@ export default function ExamInterface() {
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        endExamSecurityViolation("tab_switch", "Tab switch/minimization detected during exam");
+        handleSecurityViolation("tab_switch", "Tab switching is not allowed.");
       }
     };
     
     const handleBlur = () => {
       setProctorStatus(prev => ({ ...prev, tabLocked: false }));
-      endExamSecurityViolation("tab_switch", "Window lost focus / blurred during exam");
+      handleSecurityViolation("tab_switch", "Tab switching is not allowed.");
     };
 
     const handleFocus = () => {
@@ -335,6 +398,12 @@ export default function ExamInterface() {
     };
 
     const handleKeyDown = (e) => {
+      // Escape
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        handleSecurityViolation("fullscreen_exit", "Escape key is not allowed during the exam.");
+        return;
+      }
       // F12
       if (e.key === 'F12') {
         e.preventDefault();
@@ -377,12 +446,21 @@ export default function ExamInterface() {
     };
   }, [warningCount]);
 
-  // Check auto-submit thresholds
+  // Check auto-submit thresholds (only for non-warning-based triggers like gaze)
   useEffect(() => {
-    if (warningCount >= 3 || riskScore >= 75.0) {
+    if (riskScore >= 75.0) {
       autoSubmitExam();
     }
-  }, [warningCount, riskScore]);
+  }, [riskScore]);
+
+  // ── Cooldown check – prevents duplicate events within 2.5 s ──
+  const isOnCooldown = (eventType) => {
+    const now = Date.now();
+    const last = lastEventTimeRef.current[eventType] || 0;
+    if (now - last < 2500) return true;
+    lastEventTimeRef.current[eventType] = now;
+    return false;
+  };
 
   const addLogEntry = (msg, type = 'info') => {
     const stamp = new Date().toLocaleTimeString();
@@ -396,8 +474,46 @@ export default function ExamInterface() {
     setWarningCount(newCount);
     addLogEntry(`[Violation] ${userMessage} (${newCount}/3)`, 'error');
 
+    // Persist to localStorage so count survives page refresh
+    localStorage.setItem('exam_warning_count', String(newCount));
+
     // Post to database
     logProctorViolation(eventType, confidence, { warning_number: newCount }, description || userMessage);
+  };
+
+  // ── Security violation handler: warning-based (tab, esc, fullscreen) ──
+  const handleSecurityViolation = (eventType, reason) => {
+    if (isOnCooldown(eventType)) return;
+
+    const newCount = warningCountRef.current + 1;
+    warningCountRef.current = newCount;
+    setWarningCount(newCount);
+    localStorage.setItem('exam_warning_count', String(newCount));
+    addLogEntry(`[SECURITY] ${reason} (${newCount}/3)`, 'error');
+
+    // Show the warning modal
+    setActiveWarning({ reason, count: newCount, max: 3 });
+
+    // Post proctor event (not forced submit unless it's the 3rd)
+    logProctorViolation(eventType, 1.0, { warning_number: newCount }, reason);
+
+    // After a moment, clear the modal if not on 3rd violation
+    if (newCount < 3) {
+      setTimeout(() => setActiveWarning(null), 3000);
+      // Try re-entering fullscreen if applicable
+      if (!isCurrentlyFullscreen()) {
+        const elem = document.documentElement || document.body;
+        if (elem.requestFullscreen) elem.requestFullscreen().catch(() => {});
+      }
+    } else {
+      // 3rd violation → auto-submit
+      setTimeout(() => {
+        setActiveWarning(null);
+        logProctorViolation(eventType, 1.0, { forced_submit: true, reason, warning_number: 3 }, reason);
+        cleanupWebcam();
+        navigate('/student/exams/submission?auto=true');
+      }, 2000);
+    }
   };
 
   const logProctorViolation = async (eventType, confidence, metadata = {}, description = null) => {
@@ -438,27 +554,7 @@ export default function ExamInterface() {
     }
   };
 
-  const endExamSecurityViolation = async (eventType, description) => {
-    try {
-      const payload = {
-        session_token: sessionToken,
-        event_type: eventType,
-        confidence_score: 1.0,
-        description: description,
-        metadata: {
-          forced_submit: true,
-          reason: description,
-          exam_running: true,
-          client_agent: navigator.userAgent,
-        }
-      };
-      await api.post('/proctor/events', payload);
-    } catch (err) {
-      console.error("Failed to post proctor event on forced submit:", err);
-    }
-    cleanupWebcam();
-    navigate('/student/exams/submission?auto=true');
-  };
+
 
 
   // Periodically send frames to backend Vision AI analyzer
@@ -490,8 +586,11 @@ export default function ExamInterface() {
         if (res.looking_away) {
           details.push("Looking away");
           setProctorStatus(prev => ({ ...prev, gazeOk: false }));
-          // Only increment warnings if they are looking away repeatedly
-          logProctorViolation("looking_away", 0.85);
+          const now = Date.now();
+          if (now - lastWarnRef.current >= PROCTOR_CFG.WARNING_COOLDOWN_MS) {
+            lastWarnRef.current = now;
+            logProctorViolation("looking_away", 0.85);
+          }
         } else {
           setProctorStatus(prev => ({ ...prev, gazeOk: true }));
         }
@@ -648,28 +747,45 @@ export default function ExamInterface() {
         </div>
       )}
 
-      {/* Warning Banner alerts */}
-      {warningCount > 0 && isFullscreen && (
-        <div 
-          className="fixed top-20 z-50 bg-error text-white px-6 py-4 rounded-2xl flex items-center justify-between shadow-2xl animate-bounce border border-white/10"
-          style={{ width: '90%', maxWidth: '512px', left: '50%', transform: 'translateX(-50%)' }}
-        >
-          <div className="flex items-center gap-3">
-            <Icon name="warning" className="text-white text-xl animate-pulse" fill />
-            <span className="text-sm font-bold tracking-wide">
-              SECURITY WARNING: Violation {warningCount}/3. Auto-submit on 3rd violation!
-            </span>
+      {/* Warning Modal */}
+      {activeWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-surface-container-lowest rounded-3xl border border-outline-variant p-lg max-w-sm w-full mx-md shadow-2xl text-center space-y-md">
+            <div className="w-14 h-14 mx-auto rounded-full bg-error/20 flex items-center justify-center">
+              <Icon name={activeWarning.count >= 3 ? 'gavel' : 'warning'} className="text-error text-[32px]" fill />
+            </div>
+            <div>
+              <h2 className="text-headline-sm font-bold text-error">
+                {activeWarning.count >= 3 ? 'Exam Auto-Submitted' : 'Security Warning'}
+              </h2>
+              <p className="text-on-surface-variant text-sm mt-xs">{activeWarning.reason}</p>
+            </div>
+            <div className="flex items-center justify-center gap-xs">
+              {[1, 2, 3].map(i => (
+                <div
+                  key={i}
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-label-md font-bold border-2 transition-all ${
+                    i <= activeWarning.count
+                      ? 'bg-error text-white border-error'
+                      : 'bg-surface-container-high text-on-surface-variant border-outline-variant'
+                  }`}
+                >
+                  {i}
+                </div>
+              ))}
+            </div>
+            <p className="text-label-sm text-on-surface-variant">
+              {activeWarning.count >= 3
+                ? 'Maximum warnings reached. The exam has been submitted.'
+                : `Warning ${activeWarning.count} of ${activeWarning.max}. ${activeWarning.max - activeWarning.count} more before auto-submit.`}
+            </p>
+            {activeWarning.count < 3 && (
+              <div className="flex items-center justify-center gap-xs text-label-sm text-primary">
+                <Icon name="fullscreen" className="text-base" />
+                <span>Returning to fullscreen...</span>
+              </div>
+            )}
           </div>
-          <button 
-            onClick={() => {
-              const prev = Math.min(2, warningCount);
-              warningCountRef.current = prev;
-              setWarningCount(prev);
-            }}
-            className="text-white/80 hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors cursor-pointer"
-          >
-            <Icon name="close" className="text-lg" />
-          </button>
         </div>
       )}
 
@@ -693,6 +809,18 @@ export default function ExamInterface() {
           <div className="flex flex-col items-center">
             <span className="text-label-sm text-on-surface-variant uppercase tracking-widest">Time Remaining</span>
             <span className="text-headline-sm text-secondary font-bold font-mono">{time}</span>
+          </div>
+          <div className={`flex items-center gap-xs px-sm py-xs rounded-full border-2 font-bold ${
+            warningCount >= 3
+              ? 'bg-error/20 text-error border-error'
+              : warningCount >= 2
+                ? 'bg-warning/20 text-warning border-warning'
+                : warningCount >= 1
+                  ? 'bg-[#FFE57F]/20 text-[#FFE57F] border-[#FFE57F]'
+                  : 'bg-tertiary-fixed text-on-tertiary border-transparent'
+          }`}>
+            <Icon name="warning" className="text-sm" fill />
+            <span className="text-label-sm tracking-wider">{warningCount}/3</span>
           </div>
           <div className="flex items-center gap-sm bg-surface-container-low px-md py-xs rounded-lg border border-outline-variant">
             <div className="flex flex-col items-end">
@@ -806,6 +934,19 @@ export default function ExamInterface() {
               <div className={`w-1.5 h-1.5 rounded-full ${cameraStatus === 'active' ? 'bg-primary-container animate-pulse' : 'bg-error'}`} />
               PROCTOR MONITOR
             </div>
+            <div className="absolute inset-0 pointer-events-none">
+              {/* Gaze direction crosshair – shows smoothed gaze offset from center */}
+              <div
+                className="absolute w-3 h-3 border-2 border-primary-container rounded-full"
+                style={{
+                  left: `calc(50% + ${(smoothedPosRef.current.x - 0.5) * 100}% - 6px)`,
+                  top: `calc(50% + ${(smoothedPosRef.current.y - 0.5) * 100}% - 6px)`,
+                  transition: 'left 0.1s ease, top 0.1s ease',
+                }}
+              />
+              <div className="absolute top-1/2 left-1/2 w-0.5 h-full bg-white/10 -translate-x-1/2 -translate-y-1/2" />
+              <div className="absolute top-1/2 left-1/2 w-full h-0.5 bg-white/10 -translate-x-1/2 -translate-y-1/2" />
+            </div>
             <div className="absolute bottom-2 right-2 text-[8px] text-white/70 font-mono bg-black/40 px-xs py-0.5 rounded">
               FPS: 15
             </div>
@@ -823,6 +964,15 @@ export default function ExamInterface() {
             <Status label="Face visible" ok={proctorStatus.faceVisible} />
             <Status label="Single candidate" ok={proctorStatus.faceCount === 1} />
             <Status label="Eye gaze lock" ok={proctorStatus.gazeOk} />
+            <div className="flex items-center justify-between py-xs">
+              <span className="text-label-xs text-on-surface-variant">Gaze offset</span>
+              <span className="text-[9px] font-mono text-on-surface-variant">
+                {((smoothedPosRef.current.x - 0.5) * 100).toFixed(0)}% / {((smoothedPosRef.current.y - 0.5) * 100).toFixed(0)}%
+                <span className={`ml-xs ${gazeAwayRef.current ? 'text-error' : 'text-on-tertiary-container'}`}>
+                  {gazeAwayRef.current ? 'AWAY' : 'OK'}
+                </span>
+              </span>
+            </div>
             <Status label="Tab locked focus" ok={proctorStatus.tabLocked} />
             <Status label="Fullscreen locked" ok={proctorStatus.fullscreenOk} />
             <Status label="Microphone status" ok={true} />
