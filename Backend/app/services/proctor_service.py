@@ -8,6 +8,7 @@ from app.models.exam import ExamSession
 from app.models.proctor_event import ProctorEvent
 from app.models.user import User
 from app.schemas.proctor import ProctorEventCreate
+from app.services.risk_service import ProctorRiskService
 
 SEVERITY_MAP = {
     "multiple_faces_detected": "critical",
@@ -73,6 +74,8 @@ class ProctorService:
         db.add(event)
         db.commit()
         db.refresh(event)
+
+        ProctorRiskService.update_risk_report(db, session.id)
 
         return event
 
@@ -198,6 +201,7 @@ class ProctorService:
 
         if detected_violations:
             db.commit()
+            ProctorRiskService.update_risk_report(db, session.id)
 
         # 5. Return latest risk score
         risk_score = ProctorService.calculate_risk_score(db, session.id)
