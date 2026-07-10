@@ -24,7 +24,7 @@ export default function TeacherShell({ children, page, setPage, title = 'Teacher
       </div>
       <nav className="flex-1 px-sm space-y-xs">
         {nav.map(([icon, label, key]) => {
-          const active = page === key || (key === 'createExam' && ['scheduling'].includes(page)) || (key === 'reports' && ['answerEvaluation'].includes(page))
+          const active = page === key
           return <button key={key} onClick={() => setPage(key)} className={`w-full flex items-center gap-sm px-md py-sm rounded-lg text-left transition-colors ${active ? 'text-on-primary-fixed font-bold border-r-4 border-secondary-container bg-surface-container-high' : 'text-on-surface-variant hover:bg-surface-container-highest'}`}>
             <Icon>{icon}</Icon><span className="text-sm">{label}</span>
           </button>

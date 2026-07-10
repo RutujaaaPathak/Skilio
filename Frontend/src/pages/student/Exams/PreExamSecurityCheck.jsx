@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import Icon from '../../../components/Icon.jsx';
+import { faceDetectionService } from '../../../services/faceDetectionService.js';
 
 const steps = [
   { title: 'Device Integrity', subtitle: 'VM Detection & Lockdown', icon: 'terminal' },
@@ -12,6 +13,11 @@ const steps = [
 export default function PreExamSecurityCheck() {
   const [verifiedCount, setVerifiedCount] = useState(1);
   const [time, setTime] = useState(new Date().toLocaleTimeString());
+  const [faceVerified, setFaceVerified] = useState(false);
+  const [faceConfidence, setFaceConfidence] = useState(0);
+
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
 
   useEffect(() => {
     const clock = setInterval(() => setTime(new Date().toLocaleTimeString()), 1000);
@@ -23,6 +29,57 @@ export default function PreExamSecurityCheck() {
     return () => {
       clearInterval(clock);
       timers.forEach(clearTimeout);
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    let videoStream = null;
+
+    async function initCamera() {
+      try {
+        videoStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        streamRef.current = videoStream;
+        if (!mounted) { videoStream.getTracks().forEach(t => t.stop()); return; }
+
+        const video = videoRef.current;
+        if (!video) return;
+        video.srcObject = videoStream;
+
+        await new Promise((resolve) => { video.onloadedmetadata = resolve; });
+        await video.play();
+
+        await faceDetectionService.loadModel();
+
+        let verified = false;
+        faceDetectionService.start(video, (result) => {
+          if (!mounted || verified) return;
+          if (result.detected) {
+            const confidence = Math.min(100, Math.round((1 - Math.abs(result.gaze?.x || 0)) * 100));
+            setFaceConfidence(confidence);
+            if (confidence >= 70) {
+              verified = true;
+              setFaceVerified(true);
+            }
+          } else {
+            setFaceConfidence(0);
+          }
+        });
+      } catch (err) {
+        console.error('Camera init failed:', err);
+      }
+    }
+
+    const faceStepTimeout = setTimeout(() => {
+      initCamera();
+    }, 4500);
+
+    return () => {
+      mounted = false;
+      clearTimeout(faceStepTimeout);
+      faceDetectionService.stop();
+      if (videoStream) videoStream.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
     };
   }, []);
 
@@ -55,20 +112,20 @@ export default function PreExamSecurityCheck() {
                 return <CheckStep key={step.title} {...step} status={status} />;
               })}
             </div>
-            {verifiedCount === 4 ? (
+            {verifiedCount === 4 && faceVerified ? (
               <Link to="/student/exams/interface" className="w-full py-md px-lg bg-secondary text-primary font-bold rounded-xl flex justify-center items-center gap-base shadow-lg">
                 Start Secure Exam <Icon name="arrow_forward" />
               </Link>
             ) : (
               <button className="w-full py-md px-lg bg-surface-container-highest text-on-surface-variant font-bold rounded-xl cursor-not-allowed" disabled>
-                Start Secure Exam
+                {verifiedCount === 4 && !faceVerified ? 'Verifying face...' : 'Start Secure Exam'}
               </button>
             )}
           </section>
 
           <section className="lg:col-span-7">
             <div className="relative w-full aspect-video rounded-3xl overflow-hidden bg-primary shadow-2xl border-4 border-surface">
-              <div className="w-full h-full bg-gradient-to-br from-primary via-primary-container to-secondary-container opacity-90" />
+              <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" playsInline muted />
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="w-64 h-80 rounded-[100%] border-2 border-secondary border-dashed animate-pulse-ring" />
               </div>
@@ -81,7 +138,7 @@ export default function PreExamSecurityCheck() {
               </div>
               <div className="absolute bottom-md left-md right-md flex justify-between items-end p-md bg-black/30 rounded-xl backdrop-blur-md">
                 <div className="text-white/80 flex items-center gap-base"><Icon name="psychology" className="text-secondary" /> AI Proctoring Active</div>
-                <div className="text-right"><div className="text-secondary text-headline-sm font-bold">88% Match</div><div className="text-white/60 text-label-sm">Biometric Confidence</div></div>
+                <div className="text-right"><div className={`text-headline-sm font-bold ${faceVerified ? 'text-secondary' : 'text-white/80'}`}>{faceVerified ? 'Verified' : `${faceConfidence}% Match`}</div><div className="text-white/60 text-label-sm">Biometric Confidence</div></div>
               </div>
             </div>
           </section>

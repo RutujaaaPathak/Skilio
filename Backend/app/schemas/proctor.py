@@ -11,6 +11,7 @@ SEVERITY_MAP = {
     "copy_paste": "high",
     "multiple_faces": "critical",
     "no_face": "high",
+    "phone_detected": "critical",
     "window_blur": "medium",
     "right_click": "low",
 }
