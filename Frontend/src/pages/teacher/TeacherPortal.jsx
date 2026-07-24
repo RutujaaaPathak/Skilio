@@ -1,5 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
 import TeacherDashboard from './Dashboard/TeacherDashboard.jsx'
+import TeacherProfile from './Profile/TeacherProfile.jsx'
+import TeacherSettings from './Settings/TeacherSettings.jsx'
 import AnswerEvaluation from './Evaluation/AnswerEvaluation.jsx'
 import Reports from './Evaluation/Reports.jsx'
 import CreateExam from './ExamManagement/CreateExam.jsx'
@@ -26,6 +28,8 @@ export default function TeacherPortal() {
   const props = { page, setPage: handleSetPage, pageRef }
   const pages = {
     dashboard: <TeacherDashboard key={'dash-' + navCount} {...props} />,
+    profile: <TeacherProfile key={'prof-' + navCount} {...props} />,
+    settings: <TeacherSettings key={'set-' + navCount} {...props} />,
     answerEvaluation: <AnswerEvaluation key={'ans-' + navCount} {...props} />,
     reports: <Reports key={'rep-' + navCount} {...props} />,
     createExam: <CreateExam key={'create-' + navCount} {...props} />,
@@ -33,7 +37,7 @@ export default function TeacherPortal() {
     assignStudents: <AssignStudents key={'assign-' + navCount} {...props} />,
     questionBank: <QuestionBankManagement key={'qb-' + navCount} {...props} />,
     syllabus: <SyllabusMapping key={'syll-' + navCount} {...props} />,
-    profile: <StudentIntelligenceProfileViewer key={'prof-' + navCount} {...props} />,
+    studentProfile: <StudentIntelligenceProfileViewer key={'sp-' + navCount} {...props} />,
     liveRoom: <LiveExamControlRoom key={'live-' + navCount} {...props} />,
     monitoring: <StudentMonitoring key={'mon-' + navCount} {...props} />,
     alerts: <SuspiciousActivityAlerts key={'alert-' + navCount} {...props} />,

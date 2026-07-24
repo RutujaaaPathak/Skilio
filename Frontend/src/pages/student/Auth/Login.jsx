@@ -4,9 +4,9 @@ import Icon from '../../../components/Icon.jsx';
 import { useAuth } from '../../../context/AuthContext.jsx';
 
 const roleData = {
-  student: { label: 'Student ID / Email', placeholder: 'e.g. 2024-EDU-001' },
-  teacher: { label: 'Faculty ID / Email', placeholder: 'e.g. PROF-SMITH-442' },
-  admin: { label: 'Administrator Username', placeholder: 'e.g. sys-admin-01' }
+  student: { label: 'Student ID / Email', placeholder: 'e.g. 2024-EDU-001 or john@edu.in' },
+  teacher: { label: 'Faculty ID / Email', placeholder: 'e.g. PROF-SMITH-442 or smith@univ.edu' },
+  admin: { label: 'Admin ID / Email', placeholder: 'e.g. admin-01 or admin@inst.edu' }
 };
 
 const roleRoutes = {
@@ -33,8 +33,12 @@ export default function Login({ defaultRole = 'student' }) {
     }
 
     try {
-      const result = await login({ role, email: form.identifier, password: form.password });
-      navigate(roleRoutes[result.user?.role] || roleRoutes[role]);
+      const result = await login({ role, identifier: form.identifier, password: form.password });
+      if (result.requires_2fa) {
+        navigate('/auth/totp-challenge');
+      } else {
+        navigate(roleRoutes[result.user?.role] || roleRoutes[role]);
+      }
     } catch {
       setFormError(error || 'Invalid credentials. Please try again.');
     }
@@ -134,7 +138,7 @@ export default function Login({ defaultRole = 'student' }) {
                     <input className="w-5 h-5 rounded border-outline-variant text-secondary" type="checkbox" />
                     <span className="text-label-md text-on-surface-variant">Remember me</span>
                   </label>
-                  <a className="text-label-md font-bold text-secondary hover:underline" href="#">Forgot access?</a>
+                  <Link className="text-label-md font-bold text-secondary hover:underline" to="/auth/forgot-password">Forgot access?</Link>
                 </div>
 
                 <button

@@ -3,17 +3,24 @@ import { Link, useNavigate } from 'react-router-dom';
 import Icon from '../../../components/Icon.jsx';
 import { useAuth } from '../../../context/AuthContext.jsx';
 
-const roleRoutes = {
-  student: '/student/dashboard',
-  teacher: '/teacher/',
-};
+const PASSWORD_RULES = [
+  { key: 'min', label: 'At least 8 characters', test: (v) => v.length >= 8 },
+  { key: 'upper', label: 'One uppercase letter', test: (v) => /[A-Z]/.test(v) },
+  { key: 'lower', label: 'One lowercase letter', test: (v) => /[a-z]/.test(v) },
+  { key: 'digit', label: 'One digit', test: (v) => /\d/.test(v) },
+  { key: 'special', label: 'One special character', test: (v) => /[!@#$%^&*(),.?":{}|<>_\-]/.test(v) },
+];
 
 export default function Signup({ defaultRole = 'student' }) {
   const [role, setRole] = useState(defaultRole);
-  const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '', college: '', branch: '', division: '', year: '' });
+  const [form, setForm] = useState({ name: '', username: '', email: '', password: '', confirmPassword: '', college: '', branch: '', division: '', year: '' });
   const [formError, setFormError] = useState('');
-  const { signup, loading, error } = useAuth();
+  const { signup, loading } = useAuth();
   const navigate = useNavigate();
+
+  function getPasswordErrors(pw) {
+    return PASSWORD_RULES.filter((r) => !r.test(pw)).map((r) => r.label);
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -28,7 +35,13 @@ export default function Signup({ defaultRole = 'student' }) {
       return;
     }
 
-    const payload = { name: form.name, email: form.email, password: form.password, role };
+    const pwErrors = getPasswordErrors(form.password);
+    if (pwErrors.length > 0) {
+      setFormError('Password requirements: ' + pwErrors.join(', '));
+      return;
+    }
+
+    const payload = { name: form.name, username: form.username.trim() || null, email: form.email, password: form.password, role };
     if (role === 'student') {
       payload.college = form.college.trim() || null;
       payload.branch = form.branch.trim() || null;
@@ -38,9 +51,11 @@ export default function Signup({ defaultRole = 'student' }) {
 
     try {
       await signup(payload);
-      navigate(roleRoutes[role]);
-    } catch {
-      setFormError(error || 'Signup failed. Please try again.');
+      sessionStorage.setItem('pendingEmail', form.email);
+      sessionStorage.setItem('pendingRole', role);
+      navigate('/auth/verify-email-pending');
+    } catch (err) {
+      setFormError(err.message || 'Signup failed. Please try again.');
     }
   }
 
@@ -96,12 +111,27 @@ export default function Signup({ defaultRole = 'student' }) {
                   <input className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" placeholder="e.g. John Doe" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
                 </div>
                 <div className="space-y-xs">
+                  <label className="text-label-md font-bold text-on-surface-variant">{role === 'teacher' ? 'Faculty ID' : 'Student ID'}</label>
+                  <input className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" placeholder={role === 'teacher' ? 'e.g. PROF-SMITH-442' : 'e.g. 2024-EDU-001'} value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} />
+                </div>
+                <div className="space-y-xs">
                   <label className="text-label-md font-bold text-on-surface-variant">Email Address</label>
                   <input className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" type="email" placeholder="e.g. john@edu.in" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
                 </div>
                 <div className="space-y-xs">
                   <label className="text-label-md font-bold text-on-surface-variant">Password</label>
-                  <input className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" type="password" placeholder="Minimum 8 characters" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
+                  <input className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" type="password" placeholder="Create a strong password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
+                  <div className="mt-xs space-y-1">
+                    {PASSWORD_RULES.map((rule) => {
+                      const passed = rule.test(form.password);
+                      return (
+                        <div key={rule.key} className={`flex items-center gap-1 text-xs ${passed ? 'text-emerald-600' : 'text-on-surface-variant'}`}>
+                          <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>{passed ? 'check_circle' : 'radio_button_unchecked'}</span>
+                          {rule.label}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div className="space-y-xs">
                   <label className="text-label-md font-bold text-on-surface-variant">Confirm Password</label>

@@ -1,6 +1,11 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import Login from './pages/student/Auth/Login.jsx';
 import Signup from './pages/student/Auth/Signup.jsx';
+import ForgotPassword from './pages/auth/ForgotPassword.jsx';
+import ResetPassword from './pages/auth/ResetPassword.jsx';
+import VerificationPending from './pages/auth/VerificationPending.jsx';
+import TotpSetup from './pages/auth/TotpSetup.jsx';
+import TotpChallenge from './pages/auth/TotpChallenge.jsx';
 import StudentDashboard from './pages/student/Dashboard/StudentDashboard.jsx';
 import UpcomingExams from './pages/student/Exams/UpcomingExams.jsx';
 import ExamInstructions from './pages/student/Exams/ExamInstructions.jsx';
@@ -25,6 +30,11 @@ export default function App() {
       <Route path="/teacher/auth/login" element={<Login defaultRole="teacher" />} />
       <Route path="/student/auth/signup" element={<Signup />} />
       <Route path="/teacher/auth/signup" element={<Signup defaultRole="teacher" />} />
+      <Route path="/auth/forgot-password" element={<ForgotPassword />} />
+      <Route path="/auth/reset-password" element={<ResetPassword />} />
+      <Route path="/auth/verify-email-pending" element={<VerificationPending />} />
+      <Route path="/auth/totp-setup" element={<TotpSetup />} />
+      <Route path="/auth/totp-challenge" element={<TotpChallenge />} />
       <Route path="/student/dashboard" element={<StudentDashboard />} />
       <Route path="/student/exams" element={<UpcomingExams />} />
       <Route path="/student/exams/instructions" element={<ExamInstructions />} />
