@@ -32,8 +32,8 @@ export default function TeacherShell({ children, page, setPage, title = 'Teacher
       </nav>
       <div className="mt-auto px-sm border-t border-outline-variant pt-md space-y-xs">
         <button onClick={() => setPage('createExam')} className="w-full mb-md py-sm px-md btn-primary text-sm">Create Exam</button>
-        <button className="w-full flex items-center gap-sm px-md py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-highest"><Icon>account_circle</Icon><span className="text-sm">Profile</span></button>
-        <button className="w-full flex items-center gap-sm px-md py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-highest"><Icon>settings</Icon><span className="text-sm">Settings</span></button>
+        <button onClick={() => setPage('profile')} className="w-full flex items-center gap-sm px-md py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-highest"><Icon>account_circle</Icon><span className="text-sm">Profile</span></button>
+        <button onClick={() => setPage('settings')} className="w-full flex items-center gap-sm px-md py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-highest"><Icon>settings</Icon><span className="text-sm">Settings</span></button>
         <button onClick={() => { logout(); window.location.href = '/'; }} className="w-full flex items-center gap-sm px-md py-sm rounded-lg text-error hover:bg-error-container"><Icon>logout</Icon><span className="text-sm">Logout</span></button>
       </div>
     </aside>

@@ -1,23 +1,58 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { authService } from '../services/authService.js';
+import { setAccessToken, clearAccessToken, attemptRefresh } from '../services/api.js';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    const stored = localStorage.getItem('user');
-    return stored ? JSON.parse(stored) : null;
-  });
-  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [requires2fa, setRequires2fa] = useState(false);
+  const [tempToken, setTempToken] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function init() {
+      try {
+        const newToken = await attemptRefresh();
+        if (!cancelled && newToken) {
+          const profile = await authService.getProfile();
+          if (!cancelled) {
+            setUser(profile);
+          }
+        }
+      } catch {
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+    init();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    function handleForceLogout() {
+      clearAccessToken();
+      setUser(null);
+    }
+    window.addEventListener('auth:logout', handleForceLogout);
+    return () => window.removeEventListener('auth:logout', handleForceLogout);
+  }, []);
 
   const login = useCallback(async (credentials) => {
     setLoading(true);
     setError(null);
     try {
       const data = await authService.login(credentials);
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('user', JSON.stringify(data.user));
+      if (data.requires_2fa) {
+        setRequires2fa(true);
+        setTempToken(data.temp_token);
+        return data;
+      }
+      setAccessToken(data.token);
       setUser(data.user);
       return data;
     } catch (err) {
@@ -28,13 +63,36 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const signup = useCallback(async (data) => {
+  const complete2fa = useCallback(async (code) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await authService.signup(data);
-      localStorage.setItem('token', result.token);
-      localStorage.setItem('user', JSON.stringify(result.user));
+      const data = await authService.verifyTotpLogin(tempToken, code);
+      setAccessToken(data.token);
+      setUser(data.user);
+      setRequires2fa(false);
+      setTempToken(null);
+      return data;
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [tempToken]);
+
+  const cancel2fa = useCallback(() => {
+    setRequires2fa(false);
+    setTempToken(null);
+    setError(null);
+  }, []);
+
+  const signup = useCallback(async (formData) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await authService.signup(formData);
+      setAccessToken(result.token);
       setUser(result.user);
       return result;
     } catch (err) {
@@ -46,19 +104,17 @@ export function AuthProvider({ children }) {
   }, []);
 
   const updateUser = useCallback((userData) => {
-    localStorage.setItem('user', JSON.stringify(userData));
     setUser(userData);
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    clearAccessToken();
     setUser(null);
     authService.logout().catch(() => {});
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, login, signup, updateUser, logout }}>
+    <AuthContext.Provider value={{ user, loading, error, requires2fa, tempToken, login, signup, updateUser, logout, complete2fa, cancel2fa }}>
       {children}
     </AuthContext.Provider>
   );
