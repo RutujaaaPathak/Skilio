@@ -14,6 +14,7 @@ from app.core.rate_limiter import limiter
 from app.core.security_headers import SecurityHeadersMiddleware
 from app.database import engine, Base
 from app.routes import (
+    announcement_router,
     auth_router,
     devices_router,
     exams_router,
@@ -22,6 +23,7 @@ from app.routes import (
     questions_router,
     students_router,
     teacher_proctor_router,
+    teacher_router,
 )
 
 app = FastAPI(
@@ -54,6 +56,8 @@ app.include_router(exams_router, prefix="/api")
 app.include_router(students_router, prefix="/api")
 app.include_router(proctor_router, prefix="/api")
 app.include_router(teacher_proctor_router, prefix="/api")
+app.include_router(teacher_router, prefix="/api")
+app.include_router(announcement_router, prefix="/api")
 
 
 @app.get("/health")

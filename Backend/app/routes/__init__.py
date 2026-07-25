@@ -5,6 +5,8 @@ from app.routes.profile import router as profile_router
 from app.routes.questions import router as questions_router
 from app.routes.students import router as students_router
 from app.routes.proctor import router as proctor_router, teacher_router as teacher_proctor_router
+from app.routes.announcements import router as announcement_router
+from app.routes.teacher import router as teacher_router
 
-__all__ = ["auth_router", "devices_router", "exams_router", "profile_router", "questions_router", "students_router", "proctor_router", "teacher_proctor_router"]
+__all__ = ["auth_router", "devices_router", "exams_router", "profile_router", "questions_router", "students_router", "proctor_router", "teacher_proctor_router", "teacher_router", "announcement_router"]
 
