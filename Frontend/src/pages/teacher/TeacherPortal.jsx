@@ -1,18 +1,23 @@
-import { useState, useCallback, useRef } from 'react'
-import TeacherDashboard from './Dashboard/TeacherDashboard.jsx'
-import TeacherProfile from './Profile/TeacherProfile.jsx'
-import TeacherSettings from './Settings/TeacherSettings.jsx'
-import AnswerEvaluation from './Evaluation/AnswerEvaluation.jsx'
-import Reports from './Evaluation/Reports.jsx'
-import CreateExam from './ExamManagement/CreateExam.jsx'
-import ExamScheduling from './ExamManagement/ExamScheduling.jsx'
-import AssignStudents from './ExamManagement/AssignStudents.jsx'
-import QuestionBankManagement from './ExamManagement/QuestionBankManagement.jsx'
-import SyllabusMapping from './ExamManagement/SyllabusMapping.jsx'
-import StudentIntelligenceProfileViewer from './Intelligence/StudentIntelligenceProfileViewer.jsx'
-import LiveExamControlRoom from './Monitoring/LiveExamControlRoom.jsx'
-import StudentMonitoring from './Monitoring/StudentMonitoring.jsx'
-import SuspiciousActivityAlerts from './Monitoring/SuspiciousActivityAlerts.jsx'
+import { useState, useCallback, useRef, lazy, Suspense } from 'react'
+
+const TeacherDashboard = lazy(() => import('./Dashboard/TeacherDashboard.jsx'))
+const TeacherProfile = lazy(() => import('./Profile/TeacherProfile.jsx'))
+const TeacherSettings = lazy(() => import('./Settings/TeacherSettings.jsx'))
+const AnswerEvaluation = lazy(() => import('./Evaluation/AnswerEvaluation.jsx'))
+const Reports = lazy(() => import('./Evaluation/Reports.jsx'))
+const CreateExam = lazy(() => import('./ExamManagement/CreateExam.jsx'))
+const ExamScheduling = lazy(() => import('./ExamManagement/ExamScheduling.jsx'))
+const AssignStudents = lazy(() => import('./ExamManagement/AssignStudents.jsx'))
+const QuestionBankManagement = lazy(() => import('./ExamManagement/QuestionBankManagement.jsx'))
+const SyllabusMapping = lazy(() => import('./ExamManagement/SyllabusMapping.jsx'))
+const StudentIntelligenceProfileViewer = lazy(() => import('./Intelligence/StudentIntelligenceProfileViewer.jsx'))
+const LiveExamControlRoom = lazy(() => import('./Monitoring/LiveExamControlRoom.jsx'))
+const StudentMonitoring = lazy(() => import('./Monitoring/StudentMonitoring.jsx'))
+const SuspiciousActivityAlerts = lazy(() => import('./Monitoring/SuspiciousActivityAlerts.jsx'))
+
+function LoadingFallback() {
+  return <div className="min-h-screen bg-background flex items-center justify-center"><div className="text-primary text-lg font-semibold">Loading...</div></div>
+}
 
 export default function TeacherPortal() {
   const [page, setPage] = useState('dashboard')
@@ -43,5 +48,5 @@ export default function TeacherPortal() {
     alerts: <SuspiciousActivityAlerts key={'alert-' + navCount} {...props} />,
   }
 
-  return pages[page] || pages.dashboard
+  return <Suspense fallback={<LoadingFallback />}>{pages[page] || pages.dashboard}</Suspense>
 }

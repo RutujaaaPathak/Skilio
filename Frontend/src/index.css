@@ -217,9 +217,8 @@ body {
   -webkit-box-orient: vertical;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1023px) {
   .teacher-main { margin-left: 0 !important; }
-  .teacher-sidebar { display: none !important; }
   .teacher-top { margin-left: 0 !important; width: 100% !important; }
   .bento-grid { grid-template-columns: 1fr; }
   .bento-grid > * { grid-column: 1 / -1 !important; }
