@@ -773,3 +773,56 @@ def get_recent_alerts(
         }
         for e in events
     ]
+
+
+@router.get("/subjects", response_model=list[str])
+def get_teacher_subjects(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_teacher_or_admin),
+):
+    seen = set()
+    result = []
+
+    if current_user.subjects:
+        for s in current_user.subjects.split(","):
+            s = s.strip()
+            if s and s not in seen:
+                seen.add(s)
+                result.append(s)
+
+    exam_subjects = (
+        db.query(Exam.subject)
+        .filter(Exam.teacher_id == current_user.id)
+        .distinct()
+        .all()
+    )
+    for (s,) in exam_subjects:
+        if s and s not in seen:
+            seen.add(s)
+            result.append(s)
+
+    question_subjects = (
+        db.query(Question.subject)
+        .filter(Question.teacher_id == current_user.id)
+        .distinct()
+        .all()
+    )
+    for (s,) in question_subjects:
+        if s and s not in seen:
+            seen.add(s)
+            result.append(s)
+
+    if current_user.department:
+        dept_question_subjects = (
+            db.query(Question.subject)
+            .join(User, Question.teacher_id == User.id)
+            .filter(User.department == current_user.department)
+            .distinct()
+            .all()
+        )
+        for (s,) in dept_question_subjects:
+            if s and s not in seen:
+                seen.add(s)
+                result.append(s)
+
+    return sorted(result)

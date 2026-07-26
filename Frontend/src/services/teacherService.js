@@ -9,4 +9,5 @@ export const teacherService = {
   getAnnouncements: () => api.get('/announcements'),
   getTrends: () => api.get('/teacher/trends'),
   getAnalytics: (params) => api.get(`/teacher/analytics${params ? `?${params}` : ''}`),
+  getSubjects: () => api.get('/teacher/subjects'),
 };

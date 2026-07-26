@@ -102,3 +102,35 @@ class ProctorRiskReportResponse(BaseModel):
     summary: str | None = None
     updated_at: datetime
 
+
+class SecurityConfigResponse(BaseModel):
+    fullscreen_required: bool
+    microphone_required: bool
+    camera_required: bool
+    voice_verification_enabled: bool
+    ai_monitoring_level: str
+    face_detection_enabled: bool
+    multiple_person_detection_enabled: bool
+    phone_detection_enabled: bool
+    voice_monitoring_enabled: bool
+    screen_monitoring_enabled: bool
+    registered_device_only: bool
+    randomize_questions: bool
+    shuffle_options: bool
+    negative_marking_enabled: bool
+    negative_marks_per_question: float
+    tab_switch_limit: int
+    is_offline_enabled: bool
+    grace_period_minutes: int
+    allow_late_entry: bool
+    late_entry_cutoff_minutes: int
+
+
+class ExamSecuritySummaryResponse(BaseModel):
+    exam_id: int
+    title: str
+    subject: str
+    status: str
+    security_config: SecurityConfigResponse
+    proctoring_summary: dict
+

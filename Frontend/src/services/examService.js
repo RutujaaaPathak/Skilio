@@ -6,6 +6,13 @@ export const examService = {
   create: (data) => api.post('/exams', data),
   update: (id, data) => api.put(`/exams/${id}`, data),
   delete: (id) => api.delete(`/exams/${id}`),
+  cancel: (id, reason) => api.post(`/exams/${id}/cancel`, { reason }),
+  reschedule: (id, data) => api.post(`/exams/${id}/reschedule`, data),
+  checkConflicts: (startTime, endTime, excludeExamId) => {
+    let url = `/exams/conflicts/check?start_time=${encodeURIComponent(startTime)}&end_time=${encodeURIComponent(endTime)}`
+    if (excludeExamId) url += `&exclude_exam_id=${excludeExamId}`
+    return api.get(url)
+  },
   addQuestions: (examId, data) => api.post(`/exams/${examId}/questions`, data),
   getQuestions: (examId) => api.get(`/exams/${examId}/questions`),
   assignStudents: (examId, studentIds) => api.post(`/exams/${examId}/assign`, { student_ids: studentIds }),

@@ -14,6 +14,7 @@ const StudentIntelligenceProfileViewer = lazy(() => import('./Intelligence/Stude
 const LiveExamControlRoom = lazy(() => import('./Monitoring/LiveExamControlRoom.jsx'))
 const StudentMonitoring = lazy(() => import('./Monitoring/StudentMonitoring.jsx'))
 const SuspiciousActivityAlerts = lazy(() => import('./Monitoring/SuspiciousActivityAlerts.jsx'))
+const ExamSecurityDashboard = lazy(() => import('./Monitoring/ExamSecurityDashboard.jsx'))
 
 function LoadingFallback() {
   return <div className="min-h-screen bg-background flex items-center justify-center"><div className="text-primary text-lg font-semibold">Loading...</div></div>
@@ -46,6 +47,7 @@ export default function TeacherPortal() {
     liveRoom: <LiveExamControlRoom key={'live-' + navCount} {...props} />,
     monitoring: <StudentMonitoring key={'mon-' + navCount} {...props} />,
     alerts: <SuspiciousActivityAlerts key={'alert-' + navCount} {...props} />,
+    securityDashboard: <ExamSecurityDashboard key={'sec-' + navCount} {...props} />,
   }
 
   return <Suspense fallback={<LoadingFallback />}>{pages[page] || pages.dashboard}</Suspense>

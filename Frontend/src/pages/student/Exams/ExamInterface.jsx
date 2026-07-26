@@ -1,7 +1,8 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import Icon from '../../../components/Icon.jsx';
 import { api } from '../../../services/api.js';
+import { proctorBufferService } from '../../../services/proctorBufferService.js';
 
 export default function ExamInterface() {
   const navigate = useNavigate();
@@ -118,7 +119,45 @@ export default function ExamInterface() {
   const backCounterRef = useRef(0);
   const gazeAwayRef = useRef(false);
   const lastWarnRef = useRef(0);
+  const gazeConfidenceRef = useRef(1.0);
+  const faceLastSeenRef = useRef(Date.now());
   const [activeWarning, setActiveWarning] = useState(null); // { reason, count, max }
+
+  // ── Proctor config derived from exam ──
+  const proctorConfig = useMemo(() => {
+    if (!exam) return { face: true, multiPerson: true, phone: true, screen: true, fullscreen: true, microphone: true };
+    const level = exam.ai_monitoring_level || 'medium';
+    if (level === 'custom') {
+      return {
+        face: exam.face_detection_enabled !== false,
+        multiPerson: exam.multiple_person_detection_enabled !== false,
+        phone: exam.phone_detection_enabled !== false,
+        screen: exam.screen_monitoring_enabled !== false,
+        fullscreen: exam.fullscreen_required !== false,
+        microphone: exam.microphone_required !== false,
+      };
+    }
+    return {
+      face: level !== 'low',
+      multiPerson: level !== 'low',
+      phone: level !== 'low',
+      screen: level !== 'low',
+      fullscreen: exam.fullscreen_required !== false,
+      microphone: exam.microphone_required !== false,
+    };
+  }, [exam]);
+
+  const isEventEnabled = useCallback((eventType) => {
+    const faceEvents = ['no_face_detected', 'no_face', 'looking_away', 'face_mismatch', 'student_verified', 'camera_blocked'];
+    const multiPersonEvents = ['multiple_faces_detected', 'multiple_faces'];
+    const phoneEvents = ['phone_detected'];
+    const screenEvents = ['tab_switch', 'window_blur', 'fullscreen_exit', 'devtools_opened', 'copy_paste', 'right_click'];
+    if (faceEvents.includes(eventType)) return proctorConfig.face;
+    if (multiPersonEvents.includes(eventType)) return proctorConfig.multiPerson;
+    if (phoneEvents.includes(eventType)) return proctorConfig.phone;
+    if (screenEvents.includes(eventType)) return proctorConfig.screen;
+    return true;
+  }, [proctorConfig]);
 
   const isCurrentlyFullscreen = () => {
     return !!(
@@ -159,7 +198,7 @@ export default function ExamInterface() {
       document.removeEventListener('mozfullscreenchange', checkFullscreen);
       document.removeEventListener('MSFullscreenChange', checkFullscreen);
     };
-  }, [sessionToken]);
+  }, [sessionToken, proctorConfig]);
 
   // Request fullscreen via user gesture — called from the shield button
   const requestFullscreen = () => {
@@ -209,8 +248,9 @@ export default function ExamInterface() {
 
   // Request camera and setup tracking
   useEffect(() => {
-    // Request Camera Stream with simplified constraints
-    navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+    if (!exam) return;
+    const micRequired = proctorConfig.microphone;
+    navigator.mediaDevices.getUserMedia({ video: true, audio: micRequired })
       .then(stream => {
         streamRef.current = stream;
         setCameraStatus('active');
@@ -230,11 +270,15 @@ export default function ExamInterface() {
             tracker.on('track', event => {
               const data = event.data;
               if (data.length === 0) {
-                // No face
+                // No face — decay confidence
+                const elapsed = Date.now() - faceLastSeenRef.current;
+                gazeConfidenceRef.current = Math.max(0.0, gazeConfidenceRef.current - 0.02);
                 noFaceTimerRef.current += 1;
-                if (noFaceTimerRef.current >= 25) { // ~5 seconds of lost tracking
+                const noFaceThreshold = gazeConfidenceRef.current < 0.3 ? 40 : 25;
+                if (noFaceTimerRef.current >= noFaceThreshold) {
                   setProctorStatus(prev => ({ ...prev, faceVisible: false, faceCount: 0 }));
-                  triggerViolation("Face not detected. Please face the camera.", "no_face_detected", 0.7);
+                  const conf = Math.round(gazeConfidenceRef.current * 10) / 10;
+                  triggerViolation("Face not detected. Please face the camera.", "no_face_detected", 0.5 + conf * 0.4);
                   noFaceTimerRef.current = 0;
                 }
                 lookingAwayTimerRef.current = 0;
@@ -250,7 +294,9 @@ export default function ExamInterface() {
                 noFaceTimerRef.current = 0;
                 lookingAwayTimerRef.current = 0;
               } else {
-                // Exactly 1 face
+                // Exactly 1 face — boost confidence
+                faceLastSeenRef.current = Date.now();
+                gazeConfidenceRef.current = Math.min(1.0, gazeConfidenceRef.current + 0.05);
                 noFaceTimerRef.current = 0;
                 multipleFacesTimerRef.current = 0;
                 setProctorStatus(prev => ({ ...prev, faceVisible: true, faceCount: 1 }));
@@ -335,31 +381,77 @@ export default function ExamInterface() {
         console.error("Camera access blocked inside interface:", err);
         setCameraStatus('permission_denied');
         setProctorStatus(prev => ({ ...prev, cameraOk: false }));
-        // Log immediately
-        logProctorViolation("camera_blocked", 1.0, { error: err.name || err.message });
+        // Log immediately (if enabled)
+        if (isEventEnabled('camera_blocked')) {
+          logProctorViolation("camera_blocked", 1.0, { error: err.name || err.message });
+        }
       });
 
-    // Start periodic Vision AI screenshots check (every 20 seconds)
-    analysisIntervalRef.current = setInterval(() => {
-      captureAndAnalyzeFrame();
-    }, 20000);
+    // Start periodic Vision AI screenshots check (every 20 seconds) — only if any AI monitoring is active
+    const anyAiEnabled = proctorConfig.face || proctorConfig.multiPerson || proctorConfig.phone;
+    if (anyAiEnabled) {
+      analysisIntervalRef.current = setInterval(() => {
+        captureAndAnalyzeFrame();
+      }, 20000);
+    }
 
     return () => {
       cleanupWebcam();
     };
+  }, [proctorConfig]);
+
+  // Periodically flush buffered proctor events
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const synced = await proctorBufferService.flush();
+        if (synced > 0) addLogEntry(`Synced ${synced} buffered events`, 'success');
+      } catch {}
+    }, 5000);
+    return () => clearInterval(interval);
   }, []);
 
-  const cleanupWebcam = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
+  // Audio monitoring when microphone is enabled
+  useEffect(() => {
+    if (!proctorConfig.microphone || !streamRef.current) return;
+    let audioCtx, analyser, dataArray, source;
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const audioTrack = streamRef.current.getAudioTracks()[0];
+      if (!audioTrack || !audioTrack.enabled) return;
+      source = audioCtx.createMediaStreamSource(streamRef.current);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      dataArray = new Uint8Array(analyser.frequencyBinCount);
+    } catch (e) {
+      console.error("Audio monitoring init failed:", e);
+      return;
     }
-    if (trackerTaskRef.current) {
-      trackerTaskRef.current.stop();
-    }
-    if (analysisIntervalRef.current) {
-      clearInterval(analysisIntervalRef.current);
-    }
-  };
+
+    let silentFrames = 0;
+    const SILENT_THRESHOLD = 10;
+    const SILENT_LIMIT = 300;
+    const audioInterval = setInterval(() => {
+      if (!analyser || !dataArray) return;
+      analyser.getByteFrequencyData(dataArray);
+      const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+      if (avg < SILENT_THRESHOLD) {
+        silentFrames++;
+        if (silentFrames >= SILENT_LIMIT) {
+          silentFrames = 0;
+          triggerViolation("Microphone appears muted or blocked. Please enable your microphone.", "camera_blocked", 0.6, "Audio level below threshold for extended period");
+        }
+      } else {
+        silentFrames = 0;
+      }
+    }, 200);
+
+    return () => {
+      clearInterval(audioInterval);
+      if (audioCtx) audioCtx.close().catch(() => {});
+    };
+  }, [proctorConfig.microphone, proctorConfig]);
 
   // Visibility (Tab switch) & Window Blur listener
   useEffect(() => {
@@ -387,7 +479,7 @@ export default function ExamInterface() {
       window.removeEventListener('blur', handleBlur);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [sessionToken]);
+  }, [sessionToken, proctorConfig]);
 
 
   // Disable Right-Click and Common Dev Shortcut Keys
@@ -444,7 +536,7 @@ export default function ExamInterface() {
       document.removeEventListener('cut', handleClipboard);
       document.removeEventListener('paste', handleClipboard);
     };
-  }, [warningCount]);
+  }, [warningCount, proctorConfig]);
 
   // Check auto-submit thresholds (only for non-warning-based triggers like gaze)
   useEffect(() => {
@@ -469,6 +561,7 @@ export default function ExamInterface() {
 
   // General Violation triggers (increases warning counter, logs to DB)
   const triggerViolation = (userMessage, eventType, confidence, description = null) => {
+    if (!isEventEnabled(eventType)) return;
     warningCountRef.current += 1;
     const newCount = warningCountRef.current;
     setWarningCount(newCount);
@@ -484,6 +577,7 @@ export default function ExamInterface() {
   // ── Security violation handler: warning-based (tab, esc, fullscreen) ──
   const handleSecurityViolation = (eventType, reason) => {
     if (isOnCooldown(eventType)) return;
+    if (!isEventEnabled(eventType)) return;
 
     const newCount = warningCountRef.current + 1;
     warningCountRef.current = newCount;
@@ -545,12 +639,19 @@ export default function ExamInterface() {
         }
       };
 
-      const res = await api.post('/proctor/events', payload);
-      if (res && res.session_risk_score !== undefined) {
-        setRiskScore(res.session_risk_score);
+      proctorBufferService.queue(payload);
+      const synced = await proctorBufferService.flush();
+      if (synced > 0) {
+        addLogEntry(`Buffered events synced (${synced})`, 'success');
       }
+      try {
+        const riskRes = await api.get(`/proctor/session-risk?session_token=${sessionToken}`);
+        if (riskRes && riskRes.session_risk_score !== undefined) {
+          setRiskScore(riskRes.session_risk_score);
+        }
+      } catch {}
     } catch (err) {
-      console.error("Failed to post proctor event:", err);
+      console.error("Failed to queue proctor event:", err);
     }
   };
 
@@ -676,12 +777,14 @@ export default function ExamInterface() {
 
   const autoSubmitExam = async () => {
     cleanupWebcam();
+    await proctorBufferService.flush();
     await syncAnswers(true);
     navigate('/student/exams/submission?auto=true');
   };
 
   const handleManualSubmit = async () => {
     cleanupWebcam();
+    await proctorBufferService.flush();
     await syncAnswers(true);
     navigate('/student/exams/submission');
   };
@@ -728,8 +831,8 @@ export default function ExamInterface() {
 
   return (
     <div className="bg-surface text-on-surface overflow-hidden min-h-screen relative">
-      {/* Fullscreen Lockdown Shield */}
-      {!isFullscreen && (
+      {/* Fullscreen Lockdown Shield (only if required by exam) */}
+      {proctorConfig.fullscreen && !isFullscreen && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-md">
           <div className="max-w-[32rem] w-full bg-surface-container-lowest rounded-3xl border border-outline-variant p-lg text-center shadow-2xl space-y-md animate-pulse-ring">
             <Icon name="lock" className="text-error text-[56px]" fill />
