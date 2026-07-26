@@ -1,56 +1,5 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
-import Login from './pages/student/Auth/Login.jsx';
-import Signup from './pages/student/Auth/Signup.jsx';
-import ForgotPassword from './pages/auth/ForgotPassword.jsx';
-import ResetPassword from './pages/auth/ResetPassword.jsx';
-import VerificationPending from './pages/auth/VerificationPending.jsx';
-import TotpSetup from './pages/auth/TotpSetup.jsx';
-import TotpChallenge from './pages/auth/TotpChallenge.jsx';
-import StudentDashboard from './pages/student/Dashboard/StudentDashboard.jsx';
-import UpcomingExams from './pages/student/Exams/UpcomingExams.jsx';
-import ExamInstructions from './pages/student/Exams/ExamInstructions.jsx';
-import PreExamSecurityCheck from './pages/student/Exams/PreExamSecurityCheck.jsx';
-import FaceVerification from './pages/student/Exams/FaceVerification.jsx';
-import DeviceCheck from './pages/student/Exams/DeviceCheck.jsx';
-import VoiceVerification from './pages/student/Exams/VoiceVerification.jsx';
-import ExamInterface from './pages/student/Exams/ExamInterface.jsx';
-import SubmissionConfirmation from './pages/student/Exams/SubmissionConfirmation.jsx';
-import Result from './pages/student/Exams/Result.jsx';
-import IntelligenceProfile from './pages/student/Analytics/IntelligenceProfile.jsx';
-import StudentPerformanceAnalytics from './pages/student/Analytics/StudentPerformanceAnalytics.jsx';
-import Settings from './pages/student/Settings/Settings.jsx';
-import TeacherPortal from './pages/teacher/TeacherPortal.jsx';
-import AdminRoutes from './routes/AdminRoutes.jsx';
+import AppRoutes from './routes/AppRoutes.jsx';
 
 export default function App() {
-  return (
-    <Routes>
-      <Route path="/" element={<Login />} />
-      <Route path="/student/auth/login" element={<Login />} />
-      <Route path="/teacher/auth/login" element={<Login defaultRole="teacher" />} />
-      <Route path="/student/auth/signup" element={<Signup />} />
-      <Route path="/teacher/auth/signup" element={<Signup defaultRole="teacher" />} />
-      <Route path="/auth/forgot-password" element={<ForgotPassword />} />
-      <Route path="/auth/reset-password" element={<ResetPassword />} />
-      <Route path="/auth/verify-email-pending" element={<VerificationPending />} />
-      <Route path="/auth/totp-setup" element={<TotpSetup />} />
-      <Route path="/auth/totp-challenge" element={<TotpChallenge />} />
-      <Route path="/student/dashboard" element={<StudentDashboard />} />
-      <Route path="/student/exams" element={<UpcomingExams />} />
-      <Route path="/student/exams/instructions" element={<ExamInstructions />} />
-      <Route path="/student/exams/security-check" element={<PreExamSecurityCheck />} />
-      <Route path="/student/exams/face-verification" element={<FaceVerification />} />
-      <Route path="/student/exams/device-check" element={<DeviceCheck />} />
-      <Route path="/student/exams/voice-verification" element={<VoiceVerification />} />
-      <Route path="/student/exams/interface" element={<ExamInterface />} />
-      <Route path="/student/exams/submission" element={<SubmissionConfirmation />} />
-      <Route path="/student/exams/result" element={<Result />} />
-      <Route path="/student/analytics/intelligence" element={<IntelligenceProfile />} />
-      <Route path="/student/analytics/performance" element={<StudentPerformanceAnalytics />} />
-      <Route path="/student/settings" element={<Settings />} />
-      <Route path="/teacher/*" element={<TeacherPortal />} />
-      <Route path="/admin/*" element={<AdminRoutes />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
-  );
+  return <AppRoutes />;
 }

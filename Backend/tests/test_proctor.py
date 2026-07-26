@@ -104,6 +104,7 @@ class TestProctorEvents(unittest.TestCase):
             start_time=datetime.now(timezone.utc) - timedelta(hours=1),
             end_time=datetime.now(timezone.utc) + timedelta(hours=2),
             status="active",
+            ai_monitoring_level="high",
         )
         self.db.add(self.exam)
         self.db.commit()

@@ -8,9 +8,13 @@ from app.core.security import compute_token_hash
 from app.database import get_db
 from app.models.user import User
 from app.schemas.auth import (
+    AccountDeleteRequest,
+    AdminUserUpdate,
     ForgotPasswordRequest,
     ForgotPasswordResponse,
+    LoginHistoryItem,
     LogoutResponse,
+    OAuthLoginRequest,
     RefreshResponse,
     ResendVerificationRequest,
     ResetPasswordRequest,
@@ -30,6 +34,7 @@ from app.schemas.auth import (
     VerifyEmailResponse,
 )
 from app.services.auth_service import AuthService
+from app.services.oauth_service import oauth_login
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -57,7 +62,7 @@ def _clear_refresh_cookie(response: Response) -> None:
 
 
 @router.post("/signup", response_model=TokenResponse, status_code=201)
-@limiter.limit("5/minute")
+@limiter.limit(settings.RATE_LIMIT_SIGNUP)
 def signup(
     body: UserCreate,
     request: Request,
@@ -71,7 +76,7 @@ def signup(
 
 
 @router.post("/login")
-@limiter.limit("10/minute")
+@limiter.limit(settings.RATE_LIMIT_LOGIN)
 def login(
     body: UserLogin,
     request: Request,
@@ -84,8 +89,22 @@ def login(
     return result
 
 
+@router.post("/oauth")
+@limiter.limit(settings.RATE_LIMIT_LOGIN)
+def oauth(
+    body: OAuthLoginRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    ip, ua = _get_client_info(request)
+    result = oauth_login(db, body.provider, body.id_token, body.role, ip_address=ip, user_agent=ua)
+    _set_refresh_cookie(response, result["refresh_token"])
+    return result
+
+
 @router.post("/refresh", response_model=RefreshResponse)
-@limiter.limit("20/minute")
+@limiter.limit(settings.RATE_LIMIT_REFRESH)
 def refresh(
     request: Request,
     response: Response,
@@ -111,7 +130,7 @@ def logout(
 
 
 @router.post("/forgot-password", response_model=ForgotPasswordResponse)
-@limiter.limit("3/minute")
+@limiter.limit(settings.RATE_LIMIT_FORGOT_PASSWORD)
 def forgot_password(
     body: ForgotPasswordRequest,
     request: Request,
@@ -121,7 +140,7 @@ def forgot_password(
 
 
 @router.post("/reset-password", response_model=ResetPasswordResponse)
-@limiter.limit("5/minute")
+@limiter.limit(settings.RATE_LIMIT_RESET_PASSWORD)
 def reset_password(
     body: ResetPasswordRequest,
     request: Request,
@@ -131,7 +150,7 @@ def reset_password(
 
 
 @router.post("/verify-email", response_model=VerifyEmailResponse)
-@limiter.limit("10/minute")
+@limiter.limit(settings.RATE_LIMIT_VERIFY_EMAIL)
 def verify_email(
     body: VerifyEmailRequest,
     request: Request,
@@ -141,7 +160,7 @@ def verify_email(
 
 
 @router.post("/resend-verification", response_model=ForgotPasswordResponse)
-@limiter.limit("3/minute")
+@limiter.limit(settings.RATE_LIMIT_RESEND_VERIFICATION)
 def resend_verification(
     body: ResendVerificationRequest,
     request: Request,
@@ -156,7 +175,7 @@ def me(current_user: User = Depends(get_current_user)):
 
 
 @router.put("/me")
-@limiter.limit("10/minute")
+@limiter.limit(settings.RATE_LIMIT_UPDATE_PROFILE)
 def update_profile(
     body: UserUpdate,
     request: Request,
@@ -164,6 +183,31 @@ def update_profile(
     db: Session = Depends(get_db),
 ):
     return AuthService.update_profile(db, current_user, body)
+
+
+@router.delete("/me")
+def delete_account(
+    body: AccountDeleteRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return AuthService.delete_account(db, current_user, body.password)
+
+
+@router.get("/me/export")
+def export_data(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return AuthService.export_data(db, current_user)
+
+
+@router.get("/login-history", response_model=list[LoginHistoryItem])
+def login_history(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return AuthService.get_login_history(db, current_user)
 
 
 @router.get("/sessions", response_model=list[SessionResponse])
@@ -235,7 +279,7 @@ def totp_status(
 
 
 @router.post("/totp/verify")
-@limiter.limit("10/minute")
+@limiter.limit(settings.RATE_LIMIT_TOTP_VERIFY)
 def verify_totp_login(
     body: TOTPVerifyRequest,
     request: Request,

@@ -49,6 +49,7 @@ class UserLogin(BaseModel):
     identifier: str
     password: str
     role: str
+    remember_me: bool = False
 
 
 class UserUpdate(BaseModel):
@@ -121,6 +122,7 @@ class UserResponse(BaseModel):
     notification_preferences: str | None = None
     is_active: bool
     is_verified: bool
+    last_login: datetime | None = None
     created_at: datetime
     updated_at: datetime | None = None
 
@@ -186,6 +188,15 @@ class ResendVerificationRequest(BaseModel):
     email: EmailStr
 
 
+class LoginHistoryItem(BaseModel):
+    id: int
+    success: bool
+    ip_address: str | None = None
+    created_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class SessionResponse(BaseModel):
     id: int
     created_at: datetime
@@ -230,3 +241,50 @@ class LoginResponse(BaseModel):
 class Login2FARequired(BaseModel):
     requires_2fa: bool
     temp_token: str
+
+
+class OAuthLoginRequest(BaseModel):
+    provider: str
+    id_token: str
+    role: str = "student"
+
+    @field_validator("provider")
+    @classmethod
+    def validate_provider(cls, v: str) -> str:
+        if v not in ("google", "apple"):
+            raise ValueError("Provider must be 'google' or 'apple'")
+        return v
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, v: str) -> str:
+        if v not in PUBLIC_ROLES:
+            raise ValueError(f"Invalid role '{v}'. Must be one of {sorted(PUBLIC_ROLES)}")
+        return v
+
+
+class AccountDeleteRequest(BaseModel):
+    password: str
+
+
+class AdminUserUpdate(BaseModel):
+    is_active: bool | None = None
+    role: str | None = None
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, v: str | None) -> str | None:
+        if v is not None and v not in ("student", "teacher", "admin"):
+            raise ValueError("Role must be 'student', 'teacher', or 'admin'")
+        return v
+
+
+class BulkInviteRequest(BaseModel):
+    role: str = "student"
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, v: str) -> str:
+        if v not in PUBLIC_ROLES:
+            raise ValueError(f"Invalid role '{v}'. Must be one of {sorted(PUBLIC_ROLES)}")
+        return v

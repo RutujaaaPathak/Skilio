@@ -63,6 +63,11 @@ class AuthService:
             "updated_at": user.updated_at.isoformat()
             if isinstance(user.updated_at, datetime)
             else user.updated_at,
+            "last_login": user.last_login.isoformat()
+            if isinstance(user.last_login, datetime)
+            else user.last_login,
+            "oauth_provider": user.oauth_provider,
+            "oauth_id": user.oauth_id,
         }
 
     @staticmethod
@@ -100,6 +105,7 @@ class AuthService:
         device_info: str | None = None,
         ip_address: str | None = None,
         user_agent: str | None = None,
+        remember_me: bool = False,
     ) -> str:
         active = (
             db.query(RefreshToken)
@@ -125,11 +131,11 @@ class AuthService:
                 oldest.is_revoked = True
 
         token_str, token_hash = generate_refresh_token()
+        expiry_days = settings.REMEMBER_ME_TOKEN_EXPIRE_DAYS if remember_me else settings.REFRESH_TOKEN_EXPIRE_DAYS
         rt = RefreshToken(
             user_id=user_id,
             token_hash=token_hash,
-            expires_at=datetime.now(timezone.utc)
-            + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+            expires_at=datetime.now(timezone.utc) + timedelta(days=expiry_days),
             device_info=device_info,
             ip_address=ip_address,
             user_agent=user_agent,
@@ -240,6 +246,13 @@ class AuthService:
                 detail="Account is deactivated",
             )
 
+        if not user.is_verified:
+            AuthService._record_attempt(db, data.identifier, success=False, ip_address=ip_address)
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Please verify your email before logging in. Check your inbox for the verification OTP.",
+            )
+
         totp = db.query(TOTPSecret).filter(
             TOTPSecret.user_id == user.id,
             TOTPSecret.is_enabled == True,
@@ -254,9 +267,10 @@ class AuthService:
 
         AuthService._record_attempt(db, data.identifier, success=True, ip_address=ip_address)
 
+        user.last_login = datetime.now(timezone.utc)
         token = create_access_token({"sub": str(user.id), "role": user.role})
         refresh_token = AuthService._create_refresh_token(
-            db, user.id, ip_address=ip_address, user_agent=user_agent
+            db, user.id, ip_address=ip_address, user_agent=user_agent, remember_me=data.remember_me
         )
 
         AuditService.log("login", user_id=user.id, ip_address=ip_address, user_agent=user_agent)
@@ -450,6 +464,25 @@ class AuthService:
         return {"message": "If the account exists and is not yet verified, a new OTP has been sent."}
 
     @staticmethod
+    def get_login_history(db: Session, user: User, limit: int = 10) -> list[dict]:
+        attempts = (
+            db.query(LoginAttempt)
+            .filter(LoginAttempt.identifier == user.email)
+            .order_by(LoginAttempt.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        return [
+            {
+                "id": a.id,
+                "success": a.success,
+                "ip_address": a.ip_address,
+                "created_at": a.created_at.isoformat() if isinstance(a.created_at, datetime) else str(a.created_at),
+            }
+            for a in attempts
+        ]
+
+    @staticmethod
     def get_sessions(db: Session, user: User, current_token_hash: str | None = None) -> list[dict]:
         sessions = (
             db.query(RefreshToken)
@@ -538,6 +571,7 @@ class AuthService:
             AuditService.log("2fa_failed", user_id=user.id, ip_address=ip_address, user_agent=user_agent)
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid 2FA code")
 
+        user.last_login = datetime.now(timezone.utc)
         token = create_access_token({"sub": str(user.id), "role": user.role})
         refresh_token = AuthService._create_refresh_token(db, user.id, ip_address=ip_address, user_agent=user_agent)
 
@@ -617,4 +651,67 @@ class AuthService:
         user.updated_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(user)
+        return {"user": AuthService._build_user_dict(user)}
+
+    @staticmethod
+    def delete_account(db: Session, user: User, password: str) -> dict:
+        if not verify_password(password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid password",
+            )
+
+        db.query(RefreshToken).filter(RefreshToken.user_id == user.id).delete()
+        db.query(LoginAttempt).filter(LoginAttempt.identifier == user.email).delete()
+        AuditService.log("account_deleted", user_id=user.id)
+        db.delete(user)
+        db.commit()
+        return {"message": "Account deleted successfully."}
+
+    @staticmethod
+    def export_data(db: Session, user: User) -> dict:
+        return {
+            "user": AuthService._build_user_dict(user),
+            "sessions": [
+                {"created_at": s.created_at.isoformat() if isinstance(s.created_at, datetime) else str(s.created_at), "ip_address": s.ip_address, "device_info": s.device_info}
+                for s in db.query(RefreshToken).filter(RefreshToken.user_id == user.id).all()
+            ],
+            "login_attempts": [
+                {"created_at": a.created_at.isoformat() if isinstance(a.created_at, datetime) else str(a.created_at), "success": a.success, "ip_address": a.ip_address}
+                for a in db.query(LoginAttempt).filter(LoginAttempt.identifier == user.email).all()
+            ],
+        }
+
+    @staticmethod
+    def admin_list_users(db: Session, role: str | None = None, is_active: bool | None = None, skip: int = 0, limit: int = 100) -> list[dict]:
+        query = db.query(User)
+        if role:
+            query = query.filter(User.role == role)
+        if is_active is not None:
+            query = query.filter(User.is_active == is_active)
+        users = query.order_by(User.created_at.desc()).offset(skip).limit(limit).all()
+        return [AuthService._build_user_dict(u) for u in users]
+
+    @staticmethod
+    def admin_update_user(db: Session, user_id: int, is_active: bool | None = None, role: str | None = None) -> dict:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
+            )
+
+        if is_active is not None:
+            user.is_active = is_active
+            if not is_active:
+                db.query(RefreshToken).filter(
+                    RefreshToken.user_id == user.id,
+                    RefreshToken.is_revoked == False,
+                ).update({RefreshToken.is_revoked: True})
+        if role is not None:
+            user.role = role
+
+        db.commit()
+        db.refresh(user)
+        AuditService.log("admin_update_user", user_id=user.id, details={"is_active": is_active, "role": role})
         return {"user": AuthService._build_user_dict(user)}

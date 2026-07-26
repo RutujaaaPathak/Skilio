@@ -1,7 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Icon from '../../../components/Icon.jsx';
 import { useAuth } from '../../../context/AuthContext.jsx';
+import { authService } from '../../../services/authService.js';
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+const APPLE_CLIENT_ID = import.meta.env.VITE_APPLE_CLIENT_ID;
 
 const roleData = {
   student: { label: 'Student ID / Email', placeholder: 'e.g. 2024-EDU-001 or john@edu.in' },
@@ -19,9 +23,84 @@ export default function Login({ defaultRole = 'student' }) {
   const [role, setRole] = useState(defaultRole);
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({ identifier: '', password: '' });
+  const [rememberMe, setRememberMe] = useState(false);
   const [formError, setFormError] = useState('');
-  const { login, loading, error } = useAuth();
+  const [resending, setResending] = useState(false);
+  const [resent, setResent] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState(false);
+  const googleBtnRef = useRef(null);
+  const { login, oauthSignIn, loading, error } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID || !googleBtnRef.current) return;
+    const onLoad = () => {
+      if (window.google?.accounts?.id) {
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: handleGoogleResponse,
+        });
+        window.google.accounts.id.renderButton(googleBtnRef.current, {
+          theme: 'outline',
+          size: 'large',
+          width: '100%',
+          text: 'continue_with',
+        });
+      }
+    };
+    if (window.google?.accounts?.id) {
+      onLoad();
+    } else {
+      document.addEventListener('google-identity-loaded', onLoad);
+      return () => document.removeEventListener('google-identity-loaded', onLoad);
+    }
+  }, [role, googleBtnRef.current]);
+
+  async function handleGoogleResponse(response) {
+    setOauthLoading(true);
+    try {
+      await oauthSignIn('google', response.credential, role);
+      navigate('/student/dashboard');
+    } catch {
+      setFormError('Google sign-in failed. Please try again.');
+    } finally {
+      setOauthLoading(false);
+    }
+  }
+
+  async function handleAppleSignIn() {
+    if (!APPLE_CLIENT_ID) return;
+    setOauthLoading(true);
+    try {
+      const data = await window.AppleID.auth.signIn({
+        clientId: APPLE_CLIENT_ID,
+        scope: 'name email',
+        redirectURI: window.location.origin + '/auth/callback',
+        usePopup: true,
+      });
+      await oauthSignIn('apple', data.authorization.id_token, role);
+      navigate('/student/dashboard');
+    } catch {
+      setFormError('Apple sign-in failed. Please try again.');
+    } finally {
+      setOauthLoading(false);
+    }
+  }
+
+  const needsVerification = formError?.toLowerCase().includes('verify your email');
+
+  async function handleResendVerification() {
+    setResending(true);
+    try {
+      await authService.resendVerification(form.identifier);
+      setResent(true);
+      setTimeout(() => setResent(false), 5000);
+    } catch {
+      setFormError('Failed to resend. Please try again later.');
+    } finally {
+      setResending(false);
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -33,7 +112,7 @@ export default function Login({ defaultRole = 'student' }) {
     }
 
     try {
-      const result = await login({ role, identifier: form.identifier, password: form.password });
+      const result = await login({ role, identifier: form.identifier, password: form.password, remember_me: rememberMe });
       if (result.requires_2fa) {
         navigate('/auth/totp-challenge');
       } else {
@@ -99,6 +178,17 @@ export default function Login({ defaultRole = 'student' }) {
               {formError && (
                 <div className="mb-md rounded-lg bg-error-container p-sm text-label-md text-error font-bold">
                   {formError}
+                  {needsVerification && (
+                    <button
+                      type="button"
+                      onClick={handleResendVerification}
+                      disabled={resending || resent}
+                      className="mt-xs flex items-center gap-xs text-label-sm font-bold text-error underline hover:no-underline disabled:opacity-50"
+                    >
+                      <Icon name={resent ? 'check' : 'refresh'} className="text-sm" />
+                      {resending ? 'Sending...' : resent ? 'OTP Sent!' : 'Resend verification email'}
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -135,7 +225,7 @@ export default function Login({ defaultRole = 'student' }) {
 
                 <div className="flex items-center justify-between py-xs">
                   <label className="flex items-center gap-xs cursor-pointer">
-                    <input className="w-5 h-5 rounded border-outline-variant text-secondary" type="checkbox" />
+                    <input className="w-5 h-5 rounded border-outline-variant text-secondary" type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} />
                     <span className="text-label-md text-on-surface-variant">Remember me</span>
                   </label>
                   <Link className="text-label-md font-bold text-secondary hover:underline" to="/auth/forgot-password">Forgot access?</Link>
@@ -149,6 +239,26 @@ export default function Login({ defaultRole = 'student' }) {
                   {loading ? 'Signing In...' : <>Sign In to Secure Portal <Icon name="arrow_forward" /></>}
                 </button>
               </form>
+
+              <div className="relative my-md">
+                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-outline-variant" /></div>
+                <div className="relative flex justify-center"><span className="bg-surface px-md text-label-md text-on-surface-variant">or continue with</span></div>
+              </div>
+
+              <div className="space-y-sm">
+                <div ref={googleBtnRef} className="w-full min-h-[40px] flex justify-center" />
+                {APPLE_CLIENT_ID && (
+                  <button
+                    type="button"
+                    onClick={handleAppleSignIn}
+                    disabled={oauthLoading}
+                    className="w-full h-11 flex items-center justify-center gap-sm border border-outline-variant rounded-lg hover:bg-surface-container-low text-label-md font-bold disabled:opacity-50"
+                  >
+                    <Icon name="apple" className="text-lg" />
+                    Continue with Apple
+                  </button>
+                )}
+              </div>
 
               <p className="mt-md text-center text-label-md text-on-surface-variant">New here? <Link className="font-bold text-secondary" to={`/${role}/auth/signup`}>Create account</Link></p>
             </div>

@@ -41,5 +41,8 @@ class User(Base):
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime, onupdate=lambda: datetime.now(timezone.utc), nullable=True
     )
+    last_login: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    oauth_provider: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    oauth_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     __table_args__ = (UniqueConstraint("email", name="uq_user_email"),)

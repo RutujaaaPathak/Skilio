@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    REMEMBER_ME_TOKEN_EXPIRE_DAYS: int = 30
 
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
@@ -29,6 +30,12 @@ class Settings(BaseSettings):
     SMTP_USER: str | None = None
     SMTP_PASSWORD: str | None = None
     SMTP_TLS: bool = True
+    SMTP_FROM_EMAIL: str | None = None
+
+    GOOGLE_CLIENT_ID: str | None = None
+    GOOGLE_CLIENT_SECRET: str | None = None
+    APPLE_CLIENT_ID: str | None = None
+    APPLE_CLIENT_SECRET: str | None = None
 
     MAX_ACTIVE_SESSIONS: int = 5
 
@@ -40,6 +47,27 @@ class Settings(BaseSettings):
 
     GROQ_API_KEY: str | None = None
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
+
+    RATE_LIMIT_SIGNUP: str = "5/minute"
+    RATE_LIMIT_LOGIN: str = "10/minute"
+    RATE_LIMIT_REFRESH: str = "20/minute"
+    RATE_LIMIT_FORGOT_PASSWORD: str = "3/minute"
+    RATE_LIMIT_RESET_PASSWORD: str = "5/minute"
+    RATE_LIMIT_VERIFY_EMAIL: str = "10/minute"
+    RATE_LIMIT_RESEND_VERIFICATION: str = "3/minute"
+    RATE_LIMIT_UPDATE_PROFILE: str = "10/minute"
+    RATE_LIMIT_TOTP_VERIFY: str = "10/minute"
+    RATE_LIMIT_UPLOAD_PHOTO: str = "5/minute"
+    RATE_LIMIT_WEBAUTHN: str = "10/minute"
+
+    WEBAUTHN_RP_NAME: str = "Skillo"
+    WEBAUTHN_RP_ID: str = "localhost"
+
+    SENTRY_DSN: str | None = None
+    SENTRY_ENVIRONMENT: str = "development"
+    ENABLE_METRICS: bool = True
+    LOG_LEVEL: str = "INFO"
+    LOG_FORMAT: str = "json"  # "json" or "console"
 
     UPLOAD_DIR: str = "uploads"
     MAX_UPLOAD_SIZE: int = 5 * 1024 * 1024

@@ -9,6 +9,7 @@ export const authService = {
   resetPassword: (token, password) => api.post('/auth/reset-password', { token, password }),
   verifyEmail: (otp) => api.post('/auth/verify-email', { otp }),
   resendVerification: (email) => api.post('/auth/resend-verification', { email }),
+  getLoginHistory: () => api.get('/auth/login-history'),
   getSessions: () => api.get('/auth/sessions'),
   revokeSession: (id) => api.delete(`/auth/sessions/${id}`),
   revokeAllSessions: () => api.delete('/auth/sessions'),
@@ -24,4 +25,20 @@ export const authService = {
     return api.post('/profile/photo', formData);
   },
   removePhoto: () => api.delete('/profile/photo'),
+  oauthLogin: (provider, idToken, role = 'student') => api.post('/auth/oauth', { provider, id_token: idToken, role }),
+  deleteAccount: (password) => api.delete('/auth/me', { body: JSON.stringify({ password }) }),
+  exportData: () => api.get('/auth/me/export'),
+  adminListUsers: (params) => api.get('/admin/users', { params: new URLSearchParams(params || {}) }),
+  adminUpdateUser: (userId, data) => api.patch(`/admin/users/${userId}`, data),
+  adminBulkInvite: (file, role = 'student') => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/admin/bulk-invite', formData);
+  },
+  webauthnRegisterBegin: () => api.post('/auth/webauthn/register/begin'),
+  webauthnRegisterComplete: (credential, challenge) => api.post('/auth/webauthn/register/complete', { credential, challenge }),
+  webauthnAuthenticateBegin: () => api.post('/auth/webauthn/authenticate/begin'),
+  webauthnAuthenticateComplete: (credential, challenge) => api.post('/auth/webauthn/authenticate/complete', { credential, challenge }),
+  webauthnListCredentials: () => api.get('/auth/webauthn/credentials'),
+  webauthnDeleteCredential: (id) => api.delete(`/auth/webauthn/credentials/${id}`),
 };

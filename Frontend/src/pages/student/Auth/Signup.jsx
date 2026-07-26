@@ -2,14 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Icon from '../../../components/Icon.jsx';
 import { useAuth } from '../../../context/AuthContext.jsx';
-
-const PASSWORD_RULES = [
-  { key: 'min', label: 'At least 8 characters', test: (v) => v.length >= 8 },
-  { key: 'upper', label: 'One uppercase letter', test: (v) => /[A-Z]/.test(v) },
-  { key: 'lower', label: 'One lowercase letter', test: (v) => /[a-z]/.test(v) },
-  { key: 'digit', label: 'One digit', test: (v) => /\d/.test(v) },
-  { key: 'special', label: 'One special character', test: (v) => /[!@#$%^&*(),.?":{}|<>_\-]/.test(v) },
-];
+import { PASSWORD_RULES, getPasswordStrength, getPasswordErrors } from '../../../utils/validation.js';
 
 export default function Signup({ defaultRole = 'student' }) {
   const [role, setRole] = useState(defaultRole);
@@ -17,10 +10,7 @@ export default function Signup({ defaultRole = 'student' }) {
   const [formError, setFormError] = useState('');
   const { signup, loading } = useAuth();
   const navigate = useNavigate();
-
-  function getPasswordErrors(pw) {
-    return PASSWORD_RULES.filter((r) => !r.test(pw)).map((r) => r.label);
-  }
+  const pwStrength = getPasswordStrength(form.password);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -121,6 +111,14 @@ export default function Signup({ defaultRole = 'student' }) {
                 <div className="space-y-xs">
                   <label className="text-label-md font-bold text-on-surface-variant">Password</label>
                   <input className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" type="password" placeholder="Create a strong password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
+                  {form.password && (
+                    <div className="mt-xs">
+                      <div className="h-1.5 w-full bg-surface-container-high rounded-full overflow-hidden">
+                        <div className={`h-full transition-all duration-300 rounded-full ${pwStrength.color}`} style={{ width: `${pwStrength.score}%` }} />
+                      </div>
+                      <p className="text-label-sm mt-1 text-on-surface-variant font-bold">{pwStrength.label}</p>
+                    </div>
+                  )}
                   <div className="mt-xs space-y-1">
                     {PASSWORD_RULES.map((rule) => {
                       const passed = rule.test(form.password);
