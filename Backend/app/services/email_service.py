@@ -6,12 +6,25 @@ from app.core.config import settings
 
 class EmailService:
     @staticmethod
+    def verify_config() -> bool:
+        if not settings.SMTP_HOST or not settings.SMTP_USER:
+            return False
+        try:
+            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10) as server:
+                if settings.SMTP_TLS:
+                    server.starttls()
+                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD or "")
+                return True
+        except Exception:
+            return False
+
+    @staticmethod
     def send(to: str, subject: str, html_body: str) -> None:
         if settings.SMTP_HOST and settings.SMTP_USER:
             msg = MIMEText(html_body, "html")
             msg["Subject"] = subject
             msg["To"] = to
-            msg["From"] = settings.SMTP_USER
+            msg["From"] = settings.SMTP_FROM_EMAIL or settings.SMTP_USER
             with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
                 if settings.SMTP_TLS:
                     server.starttls()

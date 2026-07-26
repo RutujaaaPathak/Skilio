@@ -107,6 +107,22 @@ export function AuthProvider({ children }) {
     setUser(userData);
   }, []);
 
+  const oauthSignIn = useCallback(async (provider, idToken, role) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await authService.oauthLogin(provider, idToken, role);
+      setAccessToken(data.token);
+      setUser(data.user);
+      return data;
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const logout = useCallback(() => {
     clearAccessToken();
     setUser(null);
@@ -114,7 +130,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, requires2fa, tempToken, login, signup, updateUser, logout, complete2fa, cancel2fa }}>
+    <AuthContext.Provider value={{ user, loading, error, requires2fa, tempToken, login, signup, updateUser, logout, complete2fa, cancel2fa, oauthSignIn }}>
       {children}
     </AuthContext.Provider>
   );

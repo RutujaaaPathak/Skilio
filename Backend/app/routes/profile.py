@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Request, UploadFile, File
 from sqlalchemy.orm import Session
 from starlette.datastructures import URL
 
+from app.core.config import settings
 from app.core.dependencies import get_current_user
 from app.core.rate_limiter import limiter
 from app.database import get_db
@@ -18,7 +19,7 @@ router = APIRouter(prefix="/profile", tags=["Profile"])
 
 
 @router.post("/photo")
-@limiter.limit("5/minute")
+@limiter.limit(settings.RATE_LIMIT_UPLOAD_PHOTO)
 def upload_profile_photo(
     request: Request,
     file: UploadFile = File(...),

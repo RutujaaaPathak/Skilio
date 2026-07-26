@@ -1,3 +1,4 @@
+from app.routes.admin import router as admin_router
 from app.routes.auth import router as auth_router
 from app.routes.devices import router as devices_router
 from app.routes.exams import router as exams_router
@@ -7,6 +8,7 @@ from app.routes.students import router as students_router
 from app.routes.proctor import router as proctor_router, teacher_router as teacher_proctor_router
 from app.routes.announcements import router as announcement_router
 from app.routes.teacher import router as teacher_router
+from app.routes.webauthn_routes import router as webauthn_router
 
-__all__ = ["auth_router", "devices_router", "exams_router", "profile_router", "questions_router", "students_router", "proctor_router", "teacher_proctor_router", "teacher_router", "announcement_router"]
+__all__ = ["admin_router", "auth_router", "devices_router", "exams_router", "profile_router", "questions_router", "students_router", "proctor_router", "teacher_proctor_router", "teacher_router", "announcement_router", "webauthn_router"]
 

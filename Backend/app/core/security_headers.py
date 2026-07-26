@@ -1,6 +1,22 @@
+from urllib.parse import urlparse
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
+
+from app.core.config import settings
+
+
+def _build_connect_src() -> str:
+    origins = set()
+    for origin in settings.CORS_ORIGINS:
+        parsed = urlparse(origin)
+        host = parsed.hostname or "localhost"
+        port = parsed.port
+        origins.add(f"http://{host}" + (f":{port}" if port else ""))
+        origins.add(f"ws://{host}" + (f":{port}" if port else ""))
+    origins.add("'self'")
+    return " ".join(sorted(origins))
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -22,7 +38,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data:; "
-            "connect-src 'self' http://localhost:* ws://localhost:*; "
+            f"connect-src {_build_connect_src()}; "
             "frame-ancestors 'none'"
         )
         return response
