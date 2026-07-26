@@ -5,4 +5,5 @@ export const teacherProctorService = {
   getStudentRiskReport: (examId, studentId) => api.get(`/teacher/exams/${examId}/students/${studentId}/risk-report`),
   getExamProctorEvents: (examId) => api.get(`/teacher/exams/${examId}/proctor-events`),
   getStudentProctorEvents: (examId, studentId) => api.get(`/teacher/exams/${examId}/students/${studentId}/proctor-events`),
+  getExamSecuritySummary: (examId) => api.get(`/teacher/exams/${examId}/security-summary`),
 };

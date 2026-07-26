@@ -1,15 +1,18 @@
+import json
+import random
 import re
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 # pyrefly: ignore [missing-import]
 from fastapi import HTTPException, status
 # pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Session
 
+from app.models.audit_log import AuditLog
 from app.models.exam import Exam, ExamAssignment, ExamQuestion, ExamSession, StudentAnswer
 from app.models.user import User
-from app.schemas.exam import AnswerSyncRequest, ExamCreate, ExamQuestionBulkCreate, ExamUpdate
+from app.schemas.exam import AnswerSyncRequest, ExamCreate, ExamQuestionBulkCreate, ExamRescheduleRequest, ExamUpdate
 
 
 def _words_match(student_answer: str, correct_answer: str) -> bool:
@@ -20,26 +23,49 @@ def _words_match(student_answer: str, correct_answer: str) -> bool:
 
 class ExamService:
     @staticmethod
+    def _log_audit(db: Session, user_id: int, action: str, details: str | None = None):
+        db.add(AuditLog(user_id=user_id, action=action, details=details))
+        db.flush()
+
+    @staticmethod
     def _transition_statuses(db: Session):
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         for exam in db.query(Exam).filter(Exam.status == "scheduled").all():
             st = exam.start_time
             if st.tzinfo:
-                st = st.replace(tzinfo=None)
+                st = st.astimezone(timezone.utc).replace(tzinfo=None)
             if st <= now:
                 exam.status = "active"
         for exam in db.query(Exam).filter(Exam.status == "active").all():
-            et = exam.end_time
-            if et.tzinfo:
-                et = et.replace(tzinfo=None)
-            if et <= now:
+            effective_end = exam.end_time + timedelta(minutes=exam.grace_period_minutes or 0)
+            if effective_end.tzinfo:
+                effective_end = effective_end.astimezone(timezone.utc).replace(tzinfo=None)
+            if effective_end <= now:
                 exam.status = "completed"
+                # Auto-submit all open sessions
+                for s in db.query(ExamSession).filter(
+                    ExamSession.exam_id == exam.id,
+                    ExamSession.status.in_(["downloaded", "started"]),
+                ).all():
+                    s.status = "submitted"
+                    s.submitted_at = now
+                    s.assignment.status = "submitted"
+                    s.assignment.submitted_at = now
         db.commit()
 
     @staticmethod
     def create(db: Session, data: ExamCreate, teacher: User) -> Exam:
         if data.end_time <= data.start_time:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="end_time must be after start_time")
+        existing = db.query(Exam).filter(Exam.teacher_id == teacher.id, Exam.title == data.title).first()
+        if existing:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"An exam with the title '{data.title}' already exists")
+        if data.status == "scheduled" and data.start_time <= datetime.now(timezone.utc):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot schedule an exam with a past start time")
+        if data.grace_period_minutes < 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="grace_period_minutes cannot be negative")
+        if data.late_entry_cutoff_minutes < 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="late_entry_cutoff_minutes cannot be negative")
         exam = Exam(
             teacher_id=teacher.id,
             title=data.title,
@@ -49,15 +75,24 @@ class ExamService:
             total_marks=data.total_marks,
             start_time=data.start_time,
             end_time=data.end_time,
+            timezone=data.timezone,
+            grace_period_minutes=data.grace_period_minutes,
+            allow_late_entry=data.allow_late_entry,
+            late_entry_cutoff_minutes=data.late_entry_cutoff_minutes,
             is_offline_enabled=data.is_offline_enabled,
             tab_switch_limit=data.tab_switch_limit,
             camera_required=data.camera_required,
             voice_verification_enabled=data.voice_verification_enabled,
             adaptive_difficulty_enabled=data.adaptive_difficulty_enabled,
             zero_knowledge_generation_enabled=data.zero_knowledge_generation_enabled,
+            exam_type=data.exam_type,
+            difficulty_level=data.difficulty_level,
+            passing_marks=data.passing_marks,
             status=data.status,
         )
         db.add(exam)
+        db.flush()
+        ExamService._log_audit(db, teacher.id, "exam_created", f"Created exam '{data.title}' (id={exam.id})")
         db.commit()
         db.refresh(exam)
         return exam
@@ -98,11 +133,48 @@ class ExamService:
     @staticmethod
     def update(db: Session, exam_id: int, data: ExamUpdate, user: User) -> Exam:
         exam = ExamService.get_by_id(db, exam_id, user)
+
+        if exam.status == "completed":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot modify a completed exam")
+
         update_data = data.model_dump(exclude_unset=True)
+
+        if exam.status == "active" and any(f != "status" for f in update_data):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only status changes are allowed for an active exam")
+
+        if "title" in update_data and update_data["title"] != exam.title:
+            conflict = db.query(Exam).filter(Exam.teacher_id == exam.teacher_id, Exam.title == update_data["title"], Exam.id != exam.id).first()
+            if conflict:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"An exam with the title '{update_data['title']}' already exists")
+
+        if "status" in update_data:
+            new_status = update_data["status"]
+            valid_transitions = {
+                "draft": {"draft", "scheduled"},
+                "scheduled": {"draft", "scheduled"},
+                "active": {"completed"},
+                "completed": set(),
+                "cancelled": set(),
+            }
+            if new_status not in valid_transitions.get(exam.status, set()):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Cannot transition status from '{exam.status}' to '{new_status}'"
+                )
+
+            if new_status == "scheduled" and exam.status != "scheduled":
+                question_count = db.query(ExamQuestion).filter(ExamQuestion.exam_id == exam.id).count()
+                if question_count == 0:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Cannot publish an exam with no questions. Add at least one question first."
+                    )
+
         start = update_data.get("start_time") or exam.start_time
         end = update_data.get("end_time") or exam.end_time
         if end <= start:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="end_time must be after start_time")
+
         for field, value in update_data.items():
             setattr(exam, field, value)
         db.commit()
@@ -116,8 +188,102 @@ class ExamService:
         db.commit()
 
     @staticmethod
+    def cancel(db: Session, exam_id: int, reason: str, user: User) -> Exam:
+        exam = ExamService.get_by_id(db, exam_id, user)
+        if exam.status == "cancelled":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Exam is already cancelled")
+        if exam.status == "completed":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot cancel a completed exam")
+        exam.status = "cancelled"
+        exam.cancellation_reason = reason
+        ExamService._log_audit(db, user.id, "exam_cancelled", f"Cancelled exam '{exam.title}' (id={exam.id}): {reason}")
+        db.commit()
+        db.refresh(exam)
+        return exam
+
+    @staticmethod
+    def reschedule(db: Session, exam_id: int, data: ExamRescheduleRequest, user: User) -> Exam:
+        exam = ExamService.get_by_id(db, exam_id, user)
+        if exam.status != "scheduled":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot reschedule an exam with status '{exam.status}'. Only scheduled exams can be rescheduled."
+            )
+        if data.new_start_time <= datetime.now(timezone.utc):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="New start time must be in the future")
+        if exam.original_start_time is None:
+            exam.original_start_time = exam.start_time
+        old_start = exam.start_time
+        exam.start_time = data.new_start_time
+        exam.end_time = data.new_end_time
+        exam.reschedule_reason = data.reason
+        ExamService._log_audit(
+            db, user.id, "exam_rescheduled",
+            f"Rescheduled exam '{exam.title}' (id={exam.id}): old_start={old_start.isoformat()}, new_start={data.new_start_time.isoformat()}, reason={data.reason}"
+        )
+        db.commit()
+        db.refresh(exam)
+        return exam
+
+    @staticmethod
+    def _find_conflicts(
+        db: Session,
+        teacher_id: int,
+        start_time: datetime,
+        end_time: datetime,
+        exclude_exam_id: int | None = None,
+    ) -> list[Exam]:
+        query = db.query(Exam).filter(
+            Exam.teacher_id == teacher_id,
+            Exam.status.in_(["scheduled", "active"]),
+            Exam.start_time < end_time,
+            Exam.end_time > start_time,
+        )
+        if exclude_exam_id is not None:
+            query = query.filter(Exam.id != exclude_exam_id)
+        return query.order_by(Exam.start_time).all()
+
+    @staticmethod
+    def check_conflicts(
+        db: Session,
+        teacher_id: int,
+        start_time: datetime,
+        end_time: datetime,
+        exclude_exam_id: int | None = None,
+    ) -> dict:
+        conflicting = ExamService._find_conflicts(db, teacher_id, start_time, end_time, exclude_exam_id)
+        return {
+            "has_conflict": len(conflicting) > 0,
+            "conflicts": conflicting,
+        }
+
+    @staticmethod
+    def check_student_conflicts(
+        db: Session, student_id: int, start_time: datetime, end_time: datetime
+    ) -> list[dict]:
+        assignments = db.query(ExamAssignment).filter(
+            ExamAssignment.student_id == student_id,
+        ).all()
+        conflicts = []
+        for a in assignments:
+            e = a.exam
+            if e.status not in ("scheduled", "active"):
+                continue
+            if e.start_time < end_time and e.end_time > start_time:
+                conflicts.append({
+                    "student_id": student_id,
+                    "exam_id": e.id,
+                    "exam_title": e.title,
+                    "exam_start_time": e.start_time,
+                    "exam_end_time": e.end_time,
+                })
+        return conflicts
+
+    @staticmethod
     def add_questions(db: Session, exam_id: int, data: ExamQuestionBulkCreate, user: User) -> list[ExamQuestion]:
-        ExamService.get_by_id(db, exam_id, user)
+        exam = ExamService.get_by_id(db, exam_id, user)
+        if exam.status in ("active", "completed"):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Cannot modify questions on a {exam.status} exam")
         existing = {eq.question_id for eq in db.query(ExamQuestion).filter(ExamQuestion.exam_id == exam_id).all()}
         links = []
         for q in data.questions:
@@ -146,6 +312,22 @@ class ExamService:
         exam = ExamService.get_by_id(db, exam_id, user)
         if exam.status == "draft":
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot assign students to a draft exam")
+        if exam.status == "completed":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot assign students to a completed exam")
+        if exam.status == "cancelled":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot assign students to a cancelled exam")
+        # Check student conflicts
+        conflict_students = []
+        for sid in student_ids:
+            if ExamService.check_student_conflicts(db, sid, exam.start_time, exam.end_time):
+                conflict_students.append(sid)
+        if conflict_students:
+            conflict_names = db.query(User).filter(User.id.in_(conflict_students)).all()
+            names = ", ".join(u.display_name or u.username or f"id={u.id}" for u in conflict_names)
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Cannot assign. The following students already have an exam during this time slot: {names}"
+            )
         existing_ids = {
             a.student_id
             for a in db.query(ExamAssignment).filter(
@@ -216,6 +398,31 @@ class ExamService:
                 detail="Exam is not available for download. Only scheduled or active exams can be downloaded.",
             )
 
+        now = datetime.now(timezone.utc)
+        if exam.status == "active" and not exam.allow_late_entry:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Late entry is not allowed for this exam. The exam has already started.",
+            )
+        if exam.late_entry_cutoff_minutes > 0:
+            cutoff = exam.start_time + timedelta(minutes=exam.late_entry_cutoff_minutes)
+            if cutoff.tzinfo:
+                cutoff = cutoff.astimezone(timezone.utc)
+            if now > cutoff:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"The late entry window closed {exam.late_entry_cutoff_minutes} minutes after the exam start time.",
+                )
+
+        if exam.registered_device_only:
+            from app.models.device import Device
+            device_count = db.query(Device).filter(Device.user_id == user.id).count()
+            if device_count == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="This exam requires a registered device. Register your device first via POST /devices/register.",
+                )
+
         assignment = (
             db.query(ExamAssignment)
             .filter(
@@ -252,9 +459,24 @@ class ExamService:
         db.commit()
         db.refresh(session)
 
+        # Deterministic shuffle based on session_token
+        rng = random.Random(session_token)
+
+        exam_questions_list = list(exam_questions)
+        if exam.randomize_questions:
+            rng.shuffle(exam_questions_list)
+
         questions_data = []
-        for eq in exam_questions:
+        for eq in exam_questions_list:
             q = eq.question
+            opts = q.options
+            if exam.shuffle_options and q.question_type == "mcq" and opts:
+                try:
+                    parsed = json.loads(opts) if isinstance(opts, str) else list(opts)
+                    rng.shuffle(parsed)
+                    opts = json.dumps(parsed)
+                except (json.JSONDecodeError, TypeError):
+                    pass
             questions_data.append({
                 "id": q.id,
                 "subject": q.subject,
@@ -262,7 +484,7 @@ class ExamService:
                 "difficulty": q.difficulty,
                 "question_type": q.question_type,
                 "question_text": q.question_text,
-                "options": q.options,
+                "options": opts,
                 "marks": eq.marks,
                 "explanation": q.explanation,
                 "order_index": eq.order_index,
@@ -318,6 +540,18 @@ class ExamService:
             )
 
         now = datetime.now(timezone.utc)
+        # Check if past effective end (end_time + grace period)
+        exam = session.exam
+        effective_end = exam.end_time + timedelta(minutes=exam.grace_period_minutes or 0)
+        if effective_end.tzinfo:
+            effective_end_utc = effective_end.astimezone(timezone.utc).replace(tzinfo=None)
+        else:
+            effective_end_utc = effective_end
+        if effective_end_utc <= now.replace(tzinfo=None):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="The exam submission window has closed (including grace period). Answers can no longer be synced.",
+            )
 
         if session.status == "downloaded":
             session.status = "started"
@@ -397,6 +631,7 @@ class ExamService:
         ).order_by(StudentAnswer.id).all()
 
         # Get all exam questions to map marks and evaluate correct answers
+        exam = session.exam
         exam_questions = db.query(ExamQuestion).filter(ExamQuestion.exam_id == exam_id).all()
         eq_map = {eq.question_id: eq for eq in exam_questions}
 
@@ -422,17 +657,16 @@ class ExamService:
             if question.question_type == "mcq":
                 if ans.answer_text and ans.answer_text.strip().lower() == question.correct_answer.strip().lower():
                     is_correct = True
-                elif ans.selected_option and ans.selected_option.strip().lower() == question.correct_answer.strip().lower():
+                elif not exam.shuffle_options and ans.selected_option and ans.selected_option.strip().lower() == question.correct_answer.strip().lower():
                     is_correct = True
                 else:
                     try:
-                        import json
                         opts = json.loads(question.options) if question.options else []
                         if question.correct_answer.isdigit():
                             idx = int(question.correct_answer)
                             if 0 <= idx < len(opts) and ans.answer_text and ans.answer_text.strip().lower() == opts[idx].strip().lower():
                                 is_correct = True
-                        if ans.selected_option and ans.selected_option.isdigit():
+                        if not exam.shuffle_options and ans.selected_option and ans.selected_option.isdigit():
                             sel_idx = int(ans.selected_option)
                             if 0 <= sel_idx < len(opts) and opts[sel_idx].strip().lower() == question.correct_answer.strip().lower():
                                 is_correct = True
@@ -446,6 +680,8 @@ class ExamService:
             if is_correct:
                 correct_count += 1
                 earned_marks += eq.marks
+            elif exam.negative_marking_enabled:
+                earned_marks -= exam.negative_marks_per_question
 
         # If total_marks is 0, fall back to matching question counts
         if total_marks > 0:
@@ -454,6 +690,7 @@ class ExamService:
             score_percentage = round((correct_count / total * 100), 2)
         else:
             score_percentage = 0.0
+        score_percentage = max(0.0, score_percentage)
 
         # Calculate Integrity Score (100% - risk_score)
         from app.services.proctor_service import ProctorService

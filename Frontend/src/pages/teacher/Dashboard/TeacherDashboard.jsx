@@ -247,6 +247,71 @@ export default function TeacherDashboard({ page, setPage }) {
         </section>
 
         <section className="col-span-12 card p-md">
+          <h2 className="text-xl font-bold text-primary mb-md">Quick Actions</h2>
+          <div className="grid md:grid-cols-6 gap-sm">
+            {[
+              ['Create Exam', 'add', 'createExam'],
+              ['Schedule', 'event', 'scheduling'],
+              ['Assign Students', 'group_add', 'assignStudents'],
+              ['Question Bank', 'database', 'questionBank'],
+              ['Reports', 'analytics', 'reports'],
+              ['Live Room', 'videocam', 'liveRoom'],
+            ].map(([label, icon, target]) => (
+              <button key={label} onClick={() => setPage(target)} className="p-md border border-outline-variant rounded-xl hover:border-secondary-container hover:bg-secondary-container/10 text-left">
+                <Icon className="text-primary">{icon}</Icon>
+                <p className="font-bold mt-sm">{label}</p>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="col-span-12 card p-md">
+          <h2 className="text-xl font-bold text-primary mb-md">Announcements</h2>
+          {loading ? (
+            <div className="grid md:grid-cols-2 gap-md">
+              {[1,2].map(i => <div key={i} className="animate-pulse border border-outline-variant rounded-lg p-md"><div className="flex gap-sm mb-xs"><div className="h-4 bg-surface-container-high rounded-full w-16" /><div className="h-3 bg-surface-container-high rounded w-12" /></div><div className="h-5 bg-surface-container-high rounded w-3/4 mb-xs" /><div className="h-3 bg-surface-container-high rounded w-full" /><div className="h-3 bg-surface-container-high rounded w-4/5 mt-xs" /></div>)}
+            </div>
+          ) : announcements?.length > 0 ? (
+            <div className="grid md:grid-cols-2 gap-md">
+              {announcements.map(a => (
+                <div key={a.id} className="border border-outline-variant rounded-lg p-md">
+                  <div className="flex items-center gap-sm mb-xs">
+                    <span className="pill bg-secondary-fixed text-secondary text-xs capitalize">{a.category}</span>
+                    <span className="text-xs text-on-surface-variant">{new Date(a.created_at).toLocaleDateString()}</span>
+                  </div>
+                  <h3 className="font-bold text-primary">{a.title}</h3>
+                  <p className="text-sm text-on-surface-variant mt-xs line-clamp-2">{a.content}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-on-surface-variant py-md">No announcements.</p>
+          )}
+        </section>
+
+        <section className="col-span-12 card p-md">
+          <h2 className="text-xl font-bold text-primary mb-md">Upcoming Exams</h2>
+          {loading ? (
+            <div className="grid md:grid-cols-3 gap-md">
+              {[1,2,3].map(i => <div key={i} className="animate-pulse border border-outline-variant rounded-lg p-md"><div className="h-4 bg-surface-container-high rounded w-3/4 mb-xs" /><div className="h-3 bg-surface-container-high rounded w-1/2 mb-xs" /><div className="h-3 bg-surface-container-high rounded w-2/3 mb-xs" /><div className="h-3 bg-surface-container-high rounded w-12" /></div>)}
+            </div>
+          ) : upcoming.length === 0 ? (
+            <p className="text-on-surface-variant text-sm">No upcoming exams.</p>
+          ) : (
+            <div className="grid md:grid-cols-3 gap-md">
+              {upcoming.slice(0, 6).map(e => (
+                <div key={e.id} className="border border-outline-variant rounded-lg p-md">
+                  <p className="font-bold text-primary text-sm">{e.title}</p>
+                  <p className="text-xs text-on-surface-variant">{e.subject}</p>
+                  <p className="text-xs text-on-surface-variant mt-xs">{new Date(e.start_time).toLocaleString()} • {e.duration_minutes} min</p>
+                  <span className={`inline-block mt-xs text-xs font-bold ${e.status === 'active' ? 'text-error' : 'text-secondary'}`}>{e.status}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="col-span-12 card p-md">
           <h2 className="text-xl font-bold text-primary mb-md">Integrity Trend (Weekly)</h2>
           {loading ? (
             <div className="flex items-end gap-sm h-32 py-md">
@@ -655,71 +720,6 @@ export default function TeacherDashboard({ page, setPage }) {
           ) : (
             <p className="text-sm text-on-surface-variant py-md">No recent activity.</p>
           )}
-        </section>
-
-        <section className="col-span-12 card p-md">
-          <h2 className="text-xl font-bold text-primary mb-md">Announcements</h2>
-          {loading ? (
-            <div className="grid md:grid-cols-2 gap-md">
-              {[1,2].map(i => <div key={i} className="animate-pulse border border-outline-variant rounded-lg p-md"><div className="flex gap-sm mb-xs"><div className="h-4 bg-surface-container-high rounded-full w-16" /><div className="h-3 bg-surface-container-high rounded w-12" /></div><div className="h-5 bg-surface-container-high rounded w-3/4 mb-xs" /><div className="h-3 bg-surface-container-high rounded w-full" /><div className="h-3 bg-surface-container-high rounded w-4/5 mt-xs" /></div>)}
-            </div>
-          ) : announcements?.length > 0 ? (
-            <div className="grid md:grid-cols-2 gap-md">
-              {announcements.map(a => (
-                <div key={a.id} className="border border-outline-variant rounded-lg p-md">
-                  <div className="flex items-center gap-sm mb-xs">
-                    <span className="pill bg-secondary-fixed text-secondary text-xs capitalize">{a.category}</span>
-                    <span className="text-xs text-on-surface-variant">{new Date(a.created_at).toLocaleDateString()}</span>
-                  </div>
-                  <h3 className="font-bold text-primary">{a.title}</h3>
-                  <p className="text-sm text-on-surface-variant mt-xs line-clamp-2">{a.content}</p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-on-surface-variant py-md">No announcements.</p>
-          )}
-        </section>
-
-        <section className="col-span-12 card p-md">
-          <h2 className="text-xl font-bold text-primary mb-md">Upcoming Exams</h2>
-          {loading ? (
-            <div className="grid md:grid-cols-3 gap-md">
-              {[1,2,3].map(i => <div key={i} className="animate-pulse border border-outline-variant rounded-lg p-md"><div className="h-4 bg-surface-container-high rounded w-3/4 mb-xs" /><div className="h-3 bg-surface-container-high rounded w-1/2 mb-xs" /><div className="h-3 bg-surface-container-high rounded w-2/3 mb-xs" /><div className="h-3 bg-surface-container-high rounded w-12" /></div>)}
-            </div>
-          ) : upcoming.length === 0 ? (
-            <p className="text-on-surface-variant text-sm">No upcoming exams.</p>
-          ) : (
-            <div className="grid md:grid-cols-3 gap-md">
-              {upcoming.slice(0, 6).map(e => (
-                <div key={e.id} className="border border-outline-variant rounded-lg p-md">
-                  <p className="font-bold text-primary text-sm">{e.title}</p>
-                  <p className="text-xs text-on-surface-variant">{e.subject}</p>
-                  <p className="text-xs text-on-surface-variant mt-xs">{new Date(e.start_time).toLocaleString()} • {e.duration_minutes} min</p>
-                  <span className={`inline-block mt-xs text-xs font-bold ${e.status === 'active' ? 'text-error' : 'text-secondary'}`}>{e.status}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="col-span-12 card p-md">
-          <h2 className="text-xl font-bold text-primary mb-md">Quick Actions</h2>
-          <div className="grid md:grid-cols-6 gap-sm">
-            {[
-              ['Create Exam', 'add', 'createExam'],
-              ['Schedule', 'event', 'scheduling'],
-              ['Assign Students', 'group_add', 'assignStudents'],
-              ['Question Bank', 'database', 'questionBank'],
-              ['Reports', 'analytics', 'reports'],
-              ['Live Room', 'videocam', 'liveRoom'],
-            ].map(([label, icon, target]) => (
-              <button key={label} onClick={() => setPage(target)} className="p-md border border-outline-variant rounded-xl hover:border-secondary-container hover:bg-secondary-container/10 text-left">
-                <Icon className="text-primary">{icon}</Icon>
-                <p className="font-bold mt-sm">{label}</p>
-              </button>
-            ))}
-          </div>
         </section>
       </div>
     </TeacherShell>

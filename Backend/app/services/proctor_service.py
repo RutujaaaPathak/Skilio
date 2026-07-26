@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from openai import OpenAI
 
 from app.core.config import settings
-from app.models.exam import ExamSession
+from app.models.exam import Exam, ExamSession
 from app.models.proctor_event import ProctorEvent
 from app.models.user import User
 from app.schemas.proctor import ProctorEventCreate
@@ -39,6 +39,38 @@ SEVERITY_WEIGHTS = {
 
 class ProctorService:
     @staticmethod
+    def _is_event_enabled(exam: Exam, event_type: str) -> bool:
+        level = exam.ai_monitoring_level
+
+        face_events = {"no_face_detected", "no_face", "looking_away", "face_mismatch", "student_verified", "camera_blocked"}
+        multi_person_events = {"multiple_faces_detected", "multiple_faces"}
+        phone_events = {"phone_detected"}
+        voice_events = set()
+        screen_events = {"tab_switch", "window_blur", "fullscreen_exit", "devtools_opened", "copy_paste", "right_click"}
+
+        severity = SEVERITY_MAP.get(event_type, "low")
+
+        if level == "low":
+            return severity == "critical"
+        elif level == "medium":
+            return severity in ("critical", "high")
+        elif level == "high":
+            return True
+        elif level == "custom":
+            if event_type in face_events:
+                return exam.face_detection_enabled
+            elif event_type in multi_person_events:
+                return exam.multiple_person_detection_enabled
+            elif event_type in phone_events:
+                return exam.phone_detection_enabled
+            elif event_type in voice_events:
+                return exam.voice_monitoring_enabled
+            elif event_type in screen_events:
+                return exam.screen_monitoring_enabled
+            return True
+        return True
+
+    @staticmethod
     def create_event(db: Session, data: ProctorEventCreate, user: User) -> ProctorEvent:
         # 1. Verify exam session token
         session = db.query(ExamSession).filter(
@@ -57,7 +89,15 @@ class ProctorService:
                 detail="Exam session does not belong to the authenticated student",
             )
 
-        # 3. Store event with severity mapping
+        # 3. Check monitoring level — reject disabled event types
+        exam = db.query(Exam).filter(Exam.id == session.exam_id).first()
+        if not ProctorService._is_event_enabled(exam, data.event_type):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Event type '{data.event_type}' is not enabled for this exam based on its monitoring configuration.",
+            )
+
+        # 5. Store event with severity mapping
         severity = SEVERITY_MAP.get(data.event_type, "low")
 
         event = ProctorEvent(
@@ -172,18 +212,24 @@ class ProctorService:
             except Exception as e:
                 description = f"Error calling OpenAI Vision API: {str(e)}. (Fallback to heuristics)"
 
-        # 4. Save detected events to database
-        detected_violations = []
+        # 4. Load exam config and filter violations by monitoring level
+        exam = db.query(Exam).filter(Exam.id == session.exam_id).first()
+        raw_violations = []
         if phone_detected:
-            detected_violations.append(("phone_detected", 0.95))
+            raw_violations.append(("phone_detected", 0.95))
         if looking_away:
-            detected_violations.append(("looking_away", 0.85))
+            raw_violations.append(("looking_away", 0.85))
         if multiple_faces:
-            detected_violations.append(("multiple_faces_detected", 0.90))
+            raw_violations.append(("multiple_faces_detected", 0.90))
         if no_face:
-            detected_violations.append(("no_face_detected", 0.95))
+            raw_violations.append(("no_face_detected", 0.95))
         if camera_blocked:
-            detected_violations.append(("camera_blocked", 0.95))
+            raw_violations.append(("camera_blocked", 0.95))
+
+        detected_violations = []
+        for event_type, conf in raw_violations:
+            if ProctorService._is_event_enabled(exam, event_type):
+                detected_violations.append((event_type, conf))
 
         for event_type, confidence in detected_violations:
             event = ProctorEvent(
@@ -203,15 +249,16 @@ class ProctorService:
             db.commit()
             ProctorRiskService.update_risk_report(db, session.id)
 
-        # 5. Return latest risk score
+        # 5. Return latest risk score (filtered by enabled event types)
         risk_score = ProctorService.calculate_risk_score(db, session.id)
+        enabled_events = {t for t, _ in detected_violations}
 
         return {
-            "phone_detected": phone_detected,
-            "looking_away": looking_away,
-            "multiple_faces": multiple_faces,
-            "no_face": no_face,
-            "camera_blocked": camera_blocked,
+            "phone_detected": phone_detected and "phone_detected" in enabled_events,
+            "looking_away": looking_away and any(e.startswith("look") for e in enabled_events),
+            "multiple_faces": multiple_faces and any(e.startswith("multiple") for e in enabled_events),
+            "no_face": no_face and any(e.startswith("no_face") for e in enabled_events),
+            "camera_blocked": camera_blocked and "camera_blocked" in enabled_events,
             "description": description,
             "session_risk_score": risk_score,
         }

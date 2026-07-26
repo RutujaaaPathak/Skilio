@@ -10,6 +10,7 @@ from app.models.password_reset_token import PasswordResetToken
 from app.models.login_attempt import LoginAttempt
 from app.models.announcement import Announcement
 from app.models.audit_log import AuditLog
+from app.models.notification import Notification
 from app.models.totp_secret import TOTPSecret
 
 __all__ = [

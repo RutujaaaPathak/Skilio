@@ -13,6 +13,7 @@ const nav = [
   ['map', 'Curriculum', 'syllabus'],
   ['analytics', 'Reports', 'reports'],
   ['monitoring', 'Monitoring', 'liveRoom'],
+  ['shield', 'Security Dashboard', 'securityDashboard'],
 ]
 
 function Sidebar({ page, setPage, closeSidebar }) {

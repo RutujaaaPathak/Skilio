@@ -1,7 +1,7 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 # pyrefly: ignore [missing-import]
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 # pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -21,13 +21,37 @@ class Exam(Base):
     start_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     end_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     is_offline_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    fullscreen_required: Mapped[bool] = mapped_column(Boolean, default=True)
+    microphone_required: Mapped[bool] = mapped_column(Boolean, default=True)
     tab_switch_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
     camera_required: Mapped[bool] = mapped_column(Boolean, default=True)
     voice_verification_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    ai_monitoring_level: Mapped[str] = mapped_column(String(20), nullable=False, default="medium")
+    face_detection_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    multiple_person_detection_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    phone_detection_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    voice_monitoring_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    screen_monitoring_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    registered_device_only: Mapped[bool] = mapped_column(Boolean, default=False)
+    randomize_questions: Mapped[bool] = mapped_column(Boolean, default=True)
+    shuffle_options: Mapped[bool] = mapped_column(Boolean, default=True)
+    negative_marking_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    negative_marks_per_question: Mapped[float] = mapped_column(Float, default=0.0)
     adaptive_difficulty_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     zero_knowledge_generation_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    exam_type: Mapped[str | None] = mapped_column(String(50), default="exam")
+    difficulty_level: Mapped[str | None] = mapped_column(String(20), default="medium")
+    passing_marks: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    timezone: Mapped[str | None] = mapped_column(String(50), default="UTC")
+    cancellation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    original_start_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reschedule_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    grace_period_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    allow_late_entry: Mapped[bool] = mapped_column(Boolean, default=True)
+    late_entry_cutoff_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, onupdate=lambda: datetime.now(timezone.utc))
 
     teacher = relationship("User", lazy="joined")
     question_links = relationship("ExamQuestion", back_populates="exam", cascade="all, delete-orphan")
