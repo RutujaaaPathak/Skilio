@@ -1,5 +1,10 @@
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 import AppRoutes from './routes/AppRoutes.jsx';
 
 export default function App() {
-  return <AppRoutes />;
+  return (
+    <ErrorBoundary>
+      <AppRoutes />
+    </ErrorBoundary>
+  );
 }

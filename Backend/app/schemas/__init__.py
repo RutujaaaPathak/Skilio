@@ -20,6 +20,8 @@ from app.schemas.exam import (
     StudentExamResponse,
 )
 from app.schemas.proctor import ProctorEventCreate, ProctorEventResponse, ProctorEventResponseWithRisk, ProctorRiskReportResponse
+from app.schemas.recommendation import PracticeRecommendationResponse, SubjectRecommendation
+from app.schemas.ai_insight import AIInsightItem, AIInsightsResponse
 
 __all__ = [
     "UserCreate", "UserLogin", "UserResponse", "TokenResponse",

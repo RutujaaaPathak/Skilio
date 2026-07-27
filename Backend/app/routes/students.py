@@ -11,7 +11,11 @@ from app.models.user import User
 from app.schemas.auth import UserResponse
 from app.schemas.device import DeviceBindRequest
 from app.schemas.exam import AnswerSyncRequest, AnswerSyncResponse, MySubmissionResponse, OfflinePackageResponse, StudentExamResponse, VoiceVerifyRequest, VoiceVerifyResponse
+from app.schemas.recommendation import PracticeRecommendationResponse
+from app.schemas.ai_insight import AIInsightsResponse
 from app.services.exam_service import ExamService
+from app.services.recommendation_service import RecommendationService
+from app.services.ai_service import AIService
 
 router = APIRouter(prefix="/students", tags=["Students"])
 
@@ -99,6 +103,30 @@ def sync_answers(
         user=current_user,
         body=body,
     )
+
+
+@router.get("/my-results")
+def get_my_results(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return ExamService.get_my_results(db, current_user)
+
+
+@router.get("/practice-recommendations", response_model=PracticeRecommendationResponse)
+def get_practice_recommendations(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return RecommendationService.get_practice_recommendations(db, current_user)
+
+
+@router.get("/ai-insights", response_model=AIInsightsResponse)
+def get_ai_insights(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return AIService.get_insights(db, current_user)
 
 
 @router.get("/exams/{exam_id}/my-submission", response_model=MySubmissionResponse)

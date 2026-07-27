@@ -15,6 +15,7 @@ from app.schemas.auth import (
     LoginHistoryItem,
     LogoutResponse,
     OAuthLoginRequest,
+    ProfileCompletionResponse,
     RefreshResponse,
     ResendVerificationRequest,
     ResetPasswordRequest,
@@ -113,7 +114,8 @@ def refresh(
     ip, ua = _get_client_info(request)
     refresh_token_str = request.cookies.get("refresh_token")
     result = AuthService.refresh(db, refresh_token_str, ip_address=ip, user_agent=ua)
-    _set_refresh_cookie(response, result["refresh_token"])
+    if result.get("token"):
+        _set_refresh_cookie(response, result["refresh_token"])
     return result
 
 
@@ -200,6 +202,13 @@ def export_data(
     db: Session = Depends(get_db),
 ):
     return AuthService.export_data(db, current_user)
+
+
+@router.get("/me/completion", response_model=ProfileCompletionResponse)
+def profile_completion(
+    current_user: User = Depends(get_current_user),
+):
+    return AuthService.get_profile_completion(current_user)
 
 
 @router.get("/login-history", response_model=list[LoginHistoryItem])

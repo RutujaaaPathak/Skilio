@@ -7,6 +7,9 @@ from pydantic import BaseModel, EmailStr, field_validator
 PUBLIC_ROLES = frozenset({"student", "teacher"})
 
 
+SEMESTER_CHOICES = frozenset({"1", "2", "3", "4", "5", "6", "7", "8", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth"})
+
+
 class UserCreate(BaseModel):
     name: str
     username: str | None = None
@@ -19,6 +22,9 @@ class UserCreate(BaseModel):
     year: str | None = None
     phone: str | None = None
     batch: str | None = None
+    institution_id: int | None = None
+    department_id: int | None = None
+    roll_number: str | None = None
 
     @field_validator("role")
     @classmethod
@@ -61,6 +67,9 @@ class UserUpdate(BaseModel):
     year: str | None = None
     phone: str | None = None
     batch: str | None = None
+    institution_id: int | None = None
+    department_id: int | None = None
+    roll_number: str | None = None
     profile_photo_url: str | None = None
     department: str | None = None
     subjects: str | None = None
@@ -108,6 +117,9 @@ class UserResponse(BaseModel):
     year: str | None = None
     phone: str | None = None
     batch: str | None = None
+    institution_id: int | None = None
+    department_id: int | None = None
+    roll_number: str | None = None
     profile_photo_url: str | None = None
     department: str | None = None
     subjects: str | None = None
@@ -136,8 +148,8 @@ class TokenResponse(BaseModel):
 
 
 class RefreshResponse(BaseModel):
-    token: str
-    refresh_token: str
+    token: str | None = None
+    refresh_token: str | None = None
 
 
 class LogoutResponse(BaseModel):
@@ -288,3 +300,11 @@ class BulkInviteRequest(BaseModel):
         if v not in PUBLIC_ROLES:
             raise ValueError(f"Invalid role '{v}'. Must be one of {sorted(PUBLIC_ROLES)}")
         return v
+
+
+class ProfileCompletionResponse(BaseModel):
+    percentage: int
+    completed_fields: list[str]
+    missing_fields: list[str]
+    total_required: int
+    is_complete: bool

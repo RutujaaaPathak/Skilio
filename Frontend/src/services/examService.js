@@ -18,5 +18,8 @@ export const examService = {
   assignStudents: (examId, studentIds) => api.post(`/exams/${examId}/assign`, { student_ids: studentIds }),
   getAssignedStudents: (examId) => api.get(`/exams/${examId}/assigned-students`),
   getMyExams: () => api.get('/students/my-exams'),
+  getMyResults: () => api.get('/students/my-results'),
+  getPracticeRecommendations: () => api.get('/students/practice-recommendations'),
+  getAiInsights: () => api.get('/students/ai-insights'),
   removeAssignment: (assignmentId) => api.delete(`/exams/assignments/${assignmentId}`),
 };
