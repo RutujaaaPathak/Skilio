@@ -1,16 +1,33 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Icon from '../../../components/Icon.jsx';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { PASSWORD_RULES, getPasswordStrength, getPasswordErrors } from '../../../utils/validation.js';
+import { authService } from '../../../services/authService.js';
 
 export default function Signup({ defaultRole = 'student' }) {
   const [role, setRole] = useState(defaultRole);
-  const [form, setForm] = useState({ name: '', username: '', email: '', password: '', confirmPassword: '', college: '', branch: '', division: '', year: '' });
+  const [form, setForm] = useState({ name: '', username: '', email: '', password: '', confirmPassword: '', college: '', branch: '', division: '', year: '', roll_number: '', institution_id: null, department_id: null });
   const [formError, setFormError] = useState('');
+  const [institutions, setInstitutions] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const { signup, loading } = useAuth();
   const navigate = useNavigate();
   const pwStrength = getPasswordStrength(form.password);
+
+  useEffect(() => {
+    authService.getInstitutions().then(setInstitutions).catch(() => setInstitutions([]));
+  }, []);
+
+  useEffect(() => {
+    if (form.institution_id) {
+      authService.getDepartments(form.institution_id).then(setDepartments).catch(() => setDepartments([]));
+    } else {
+      setDepartments([]);
+    }
+  }, [form.institution_id]);
+
+  
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -33,10 +50,13 @@ export default function Signup({ defaultRole = 'student' }) {
 
     const payload = { name: form.name, username: form.username.trim() || null, email: form.email, password: form.password, role };
     if (role === 'student') {
+      payload.institution_id = form.institution_id || null;
+      payload.department_id = form.department_id || null;
+      payload.roll_number = form.roll_number.trim() || null;
       payload.college = form.college.trim() || null;
       payload.branch = form.branch.trim() || null;
       payload.division = form.division.trim() || null;
-      payload.year = form.year.trim() || null;
+      payload.year = form.year || null;
     }
 
     try {
@@ -97,20 +117,20 @@ export default function Signup({ defaultRole = 'student' }) {
 
               <form className="space-y-md" onSubmit={handleSubmit}>
                 <div className="space-y-xs">
-                  <label className="text-label-md font-bold text-on-surface-variant">Full Name</label>
-                  <input className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" placeholder="e.g. John Doe" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+                  <label htmlFor="signup-name" className="text-label-md font-bold text-on-surface-variant">Full Name</label>
+                  <input id="signup-name" className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" placeholder="e.g. John Doe" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
                 </div>
                 <div className="space-y-xs">
-                  <label className="text-label-md font-bold text-on-surface-variant">{role === 'teacher' ? 'Faculty ID' : 'Student ID'}</label>
-                  <input className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" placeholder={role === 'teacher' ? 'e.g. PROF-SMITH-442' : 'e.g. 2024-EDU-001'} value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} />
+                  <label htmlFor="signup-username" className="text-label-md font-bold text-on-surface-variant">{role === 'teacher' ? 'Faculty ID' : 'Student ID'}</label>
+                  <input id="signup-username" className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" placeholder={role === 'teacher' ? 'e.g. PROF-SMITH-442' : 'e.g. 2024-EDU-001'} value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} />
                 </div>
                 <div className="space-y-xs">
-                  <label className="text-label-md font-bold text-on-surface-variant">Email Address</label>
-                  <input className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" type="email" placeholder="e.g. john@edu.in" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
+                  <label htmlFor="signup-email" className="text-label-md font-bold text-on-surface-variant">Email Address</label>
+                  <input id="signup-email" className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" type="email" placeholder="e.g. john@edu.in" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
                 </div>
                 <div className="space-y-xs">
-                  <label className="text-label-md font-bold text-on-surface-variant">Password</label>
-                  <input className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" type="password" placeholder="Create a strong password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
+                  <label htmlFor="signup-password" className="text-label-md font-bold text-on-surface-variant">Password</label>
+                  <input id="signup-password" className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" type="password" placeholder="Create a strong password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
                   {form.password && (
                     <div className="mt-xs">
                       <div className="h-1.5 w-full bg-surface-container-high rounded-full overflow-hidden">
@@ -124,7 +144,7 @@ export default function Signup({ defaultRole = 'student' }) {
                       const passed = rule.test(form.password);
                       return (
                         <div key={rule.key} className={`flex items-center gap-1 text-xs ${passed ? 'text-emerald-600' : 'text-on-surface-variant'}`}>
-                          <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>{passed ? 'check_circle' : 'radio_button_unchecked'}</span>
+                          <span className="material-symbols-outlined" style={{ fontSize: '14px' }} aria-hidden="true">{passed ? 'check_circle' : 'radio_button_unchecked'}</span>
                           {rule.label}
                         </div>
                       );
@@ -132,32 +152,71 @@ export default function Signup({ defaultRole = 'student' }) {
                   </div>
                 </div>
                 <div className="space-y-xs">
-                  <label className="text-label-md font-bold text-on-surface-variant">Confirm Password</label>
-                  <input className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" type="password" placeholder="Re-enter password" value={form.confirmPassword} onChange={e => setForm(f => ({ ...f, confirmPassword: e.target.value }))} />
+                  <label htmlFor="signup-confirm" className="text-label-md font-bold text-on-surface-variant">Confirm Password</label>
+                  <input id="signup-confirm" className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" type="password" placeholder="Re-enter password" value={form.confirmPassword} onChange={e => setForm(f => ({ ...f, confirmPassword: e.target.value }))} />
                 </div>
                 {role === 'student' && (
                   <>
                     <div className="space-y-xs">
-                      <label className="text-label-md font-bold text-on-surface-variant">College</label>
-                      <input className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" placeholder="e.g. MIT College" value={form.college} onChange={e => setForm(f => ({ ...f, college: e.target.value }))} />
+                      <label htmlFor="signup-institution" className="text-label-md font-bold text-on-surface-variant">College / Institution</label>
+                      <select
+                        id="signup-institution"
+                        className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md"
+                        value={form.institution_id || ''}
+                        onChange={e => {
+                          const val = e.target.value ? Number(e.target.value) : null;
+                          setForm(f => ({ ...f, institution_id: val, department_id: null }));
+                        }}
+                      >
+                        <option value="">Select Institution</option>
+                        {institutions.map(inst => (
+                          <option key={inst.id} value={inst.id}>{inst.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {form.institution_id && (
+                      <div className="space-y-xs">
+                        <label htmlFor="signup-department" className="text-label-md font-bold text-on-surface-variant">Branch / Department</label>
+                        <select
+                          id="signup-department"
+                          className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md"
+                          value={form.department_id || ''}
+                          onChange={e => setForm(f => ({ ...f, department_id: e.target.value ? Number(e.target.value) : null }))}
+                        >
+                          <option value="">Select Department</option>
+                          {departments.map(dept => (
+                            <option key={dept.id} value={dept.id}>{dept.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-sm">
+                      <div className="space-y-xs">
+                        <label htmlFor="signup-roll" className="text-label-md font-bold text-on-surface-variant">Roll Number</label>
+                        <input id="signup-roll" className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" placeholder="e.g. 2024CS001" value={form.roll_number} onChange={e => setForm(f => ({ ...f, roll_number: e.target.value }))} />
+                      </div>
+                      <div className="space-y-xs">
+                        <label htmlFor="signup-division" className="text-label-md font-bold text-on-surface-variant">Division</label>
+                        <input id="signup-division" className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" placeholder="e.g. A" value={form.division} onChange={e => setForm(f => ({ ...f, division: e.target.value }))} />
+                      </div>
                     </div>
                     <div className="space-y-xs">
-                      <label className="text-label-md font-bold text-on-surface-variant">Branch</label>
-                      <input className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" placeholder="e.g. Computer Science" value={form.branch} onChange={e => setForm(f => ({ ...f, branch: e.target.value }))} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-sm">
-                      <div className="space-y-xs">
-                        <label className="text-label-md font-bold text-on-surface-variant">Division</label>
-                        <input className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" placeholder="e.g. A" value={form.division} onChange={e => setForm(f => ({ ...f, division: e.target.value }))} />
-                      </div>
-                      <div className="space-y-xs">
-                        <label className="text-label-md font-bold text-on-surface-variant">Year</label>
-                        <input className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" placeholder="e.g. 3rd Year" value={form.year} onChange={e => setForm(f => ({ ...f, year: e.target.value }))} />
-                      </div>
+                      <label htmlFor="signup-year" className="text-label-md font-bold text-on-surface-variant">Year / Semester</label>
+                      <select
+                        id="signup-year"
+                        className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md"
+                        value={form.year}
+                        onChange={e => setForm(f => ({ ...f, year: e.target.value }))}
+                      >
+                        <option value="">Select Semester</option>
+                        {['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'].map(s => (
+                          <option key={s} value={s}>{s} Semester</option>
+                        ))}
+                      </select>
                     </div>
                   </>
                 )}
-                <button type="submit" disabled={loading} className="w-full h-12 bg-primary text-on-primary font-bold rounded-lg hover:opacity-90 disabled:opacity-50">
+                <button type="submit" disabled={loading} className="w-full h-12 bg-primary text-on-primary font-bold rounded-lg hover:opacity-90 focus-visible:outline-2 focus-visible:outline-secondary disabled:opacity-50">
                   {loading ? 'Creating Account...' : 'Create Secure Account'}
                 </button>
               </form>

@@ -12,6 +12,9 @@ from app.models.announcement import Announcement
 from app.models.audit_log import AuditLog
 from app.models.notification import Notification
 from app.models.totp_secret import TOTPSecret
+from app.models.emergency_contact import EmergencyContact
+from app.models.institution import Institution
+from app.models.department import Department
 
 __all__ = [
     "User",
@@ -31,4 +34,8 @@ __all__ = [
     "AuditLog",
     "TOTPSecret",
     "Announcement",
+    "Notification",
+    "EmergencyContact",
+    "Institution",
+    "Department",
 ]

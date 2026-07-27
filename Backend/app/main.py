@@ -25,8 +25,12 @@ from app.routes import (
     admin_router,
     announcement_router,
     auth_router,
+    departments_router,
     devices_router,
+    emergency_contacts_router,
     exams_router,
+    institutions_router,
+    notifications_router,
     profile_router,
     proctor_router,
     questions_router,
@@ -86,7 +90,6 @@ app = FastAPI(
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -95,6 +98,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
+app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
@@ -111,6 +115,10 @@ app.include_router(teacher_proctor_router, prefix="/api")
 app.include_router(teacher_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 app.include_router(announcement_router, prefix="/api")
+app.include_router(emergency_contacts_router, prefix="/api")
+app.include_router(institutions_router, prefix="/api")
+app.include_router(departments_router, prefix="/api")
+app.include_router(notifications_router, prefix="/api")
 app.include_router(webauthn_router, prefix="/api")
 
 
@@ -223,6 +231,15 @@ def _run_migrations():
     if "oauth_id" not in columns:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE users ADD COLUMN oauth_id VARCHAR(255)"))
+
+    user_new_columns = {c["name"] for c in inspector.get_columns("users")}
+    with engine.begin() as conn:
+        if "institution_id" not in user_new_columns:
+            conn.execute(text("ALTER TABLE users ADD COLUMN institution_id INTEGER"))
+        if "department_id" not in user_new_columns:
+            conn.execute(text("ALTER TABLE users ADD COLUMN department_id INTEGER"))
+        if "roll_number" not in user_new_columns:
+            conn.execute(text("ALTER TABLE users ADD COLUMN roll_number VARCHAR(50)"))
 
     profile_columns = {c["name"] for c in inspector.get_columns("users")}
     with engine.begin() as conn:

@@ -378,6 +378,38 @@ class ExamService:
             .all()
         )
 
+    @staticmethod
+    def get_my_results(db: Session, user: User) -> list[dict]:
+        ExamService._transition_statuses(db)
+        assignments = (
+            db.query(ExamAssignment)
+            .filter(
+                ExamAssignment.student_id == user.id,
+                ExamAssignment.status == "submitted",
+            )
+            .order_by(ExamAssignment.submitted_at.desc())
+            .all()
+        )
+        results = []
+        for a in assignments:
+            try:
+                submission = ExamService.get_my_submission(db, a.exam_id, user)
+            except HTTPException:
+                continue
+            exam = a.exam
+            results.append({
+                "exam_id": a.exam_id,
+                "exam_title": exam.title if exam else "",
+                "exam_subject": exam.subject if exam else "",
+                "total_marks": exam.total_marks if exam else 0,
+                "submitted_at": a.submitted_at,
+                "score_percentage": submission.get("score_percentage"),
+                "correct_count": submission.get("correct_count"),
+                "total_questions": submission.get("total_questions"),
+                "integrity_percentage": submission.get("integrity_percentage"),
+            })
+        return results
+
     # ── Offline Package ──
     @staticmethod
     def get_offline_package(

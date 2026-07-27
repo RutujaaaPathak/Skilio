@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { authService } from '../services/authService.js';
 import { setAccessToken, clearAccessToken, attemptRefresh } from '../services/api.js';
 
@@ -126,11 +126,16 @@ export function AuthProvider({ children }) {
   const logout = useCallback(() => {
     clearAccessToken();
     setUser(null);
-    authService.logout().catch(() => {});
+    authService.logout().catch(() => { /* session already cleared client-side */ });
   }, []);
 
+  const ctxValue = useMemo(() => ({
+    user, loading, error, requires2fa, tempToken,
+    login, signup, updateUser, logout, complete2fa, cancel2fa, oauthSignIn,
+  }), [user, loading, error, requires2fa, tempToken, login, signup, updateUser, logout, complete2fa, cancel2fa, oauthSignIn]);
+
   return (
-    <AuthContext.Provider value={{ user, loading, error, requires2fa, tempToken, login, signup, updateUser, logout, complete2fa, cancel2fa, oauthSignIn }}>
+    <AuthContext.Provider value={ctxValue}>
       {children}
     </AuthContext.Provider>
   );

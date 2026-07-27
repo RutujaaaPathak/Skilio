@@ -26,8 +26,12 @@ export default function PreExamSecurityCheck() {
   const [faceAlignedPercent, setFaceAlignedPercent] = useState(0);
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [faceIsAligned, setFaceIsAligned] = useState(false);
-  const [voiceTranscript, setVoiceTranscript] = useState('');
+  const EXPECTED_PHRASE = "my identity is verified for this secure exam";
+  const [spokenText, setSpokenText] = useState('');
   const [voiceMatchStatus, setVoiceMatchStatus] = useState('idle');
+  const [isUsingFallback, setIsUsingFallback] = useState(false);
+  const isVoiceRecordingRef = useRef(false);
+  const verifiedCountRef = useRef(0);
 
   // Simulation and Webcam States
   const [sessionToken, setSessionToken] = useState(localStorage.getItem('session_token') || '');
@@ -43,6 +47,8 @@ export default function PreExamSecurityCheck() {
   const webcamStreamRef = useRef(null);
   const faceTrackerTaskRef = useRef(null);
   const alignedCounterRef = useRef(0);
+  const recognitionRef = useRef(null);
+  const fallbackModeRef = useRef(false);
 
   const isCurrentlyFullscreen = () => {
     return !!(
@@ -200,7 +206,7 @@ export default function PreExamSecurityCheck() {
     }
   }, []);
 
-  const cleanupAll = () => {
+  function cleanupAll() {
     if (webcamStreamRef.current) {
       webcamStreamRef.current.getTracks().forEach(t => t.stop());
     }
@@ -213,7 +219,20 @@ export default function PreExamSecurityCheck() {
     if (faceTrackerTaskRef.current) {
       faceTrackerTaskRef.current.stop();
     }
-  };
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.onresult = null;
+        recognitionRef.current.onerror = null;
+        recognitionRef.current.onend = null;
+        recognitionRef.current.stop();
+      } catch {
+        // ignore
+      }
+      recognitionRef.current = null;
+    }
+    fallbackModeRef.current = false;
+    setIsUsingFallback(false);
+  }
 
   const handleStartExam = () => {
     if (!document.fullscreenElement) {
@@ -426,81 +445,130 @@ export default function PreExamSecurityCheck() {
     }
   }, [verifiedCount]);
 
-  const EXPECTED_PHRASE = "my identity is verified for this secure exam";
-  const recognitionRef = useRef(null);
+  // Keep refs in sync with state
+  useEffect(() => {
+    verifiedCountRef.current = verifiedCount;
+  }, [verifiedCount]);
 
-  // Step 4: Voice Verification using Speech-to-Text
-  const startVoiceCheck = async () => {
-    if (verifiedCount !== 3) return;
+  useEffect(() => {
+    isVoiceRecordingRef.current = isVoiceRecording;
+  }, [isVoiceRecording]);
 
-    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognitionAPI) {
-      setVoiceCheckMsg('Speech recognition not supported in this browser.');
-      addLog({ type: 'error', msg: 'Speech recognition API unavailable. Using fallback.' });
-      setVerifiedCount(4);
-      return;
+  // Auto-trigger voice check when step 4 starts
+  useEffect(() => {
+    if (verifiedCount === 3) {
+      const timer = setTimeout(() => startVoiceCheck(), 500);
+      return () => clearTimeout(timer);
     }
+  }, [verifiedCount]);
 
+  // Step 4: Voice Verification speaking check
+  const startVoiceCheck = async () => {
+    if (verifiedCount !== 3 || recognitionRef.current) return;
+    isVoiceRecordingRef.current = true;
     setIsVoiceRecording(true);
-    setVoiceTranscript('');
-    setVoiceMatchStatus('listening');
-    setVoiceCheckMsg('Listening... Speak the phrase aloud.');
-    addLog({ type: 'info', msg: 'Started voice verification with STT...' });
+    setSpokenText('');
+    setVoiceProgress(0);
+    setIsUsingFallback(false);
+    fallbackModeRef.current = false;
+    setVoiceCheckMsg('Initializing microphone...');
+    addLog({ type: 'info', msg: 'Starting fresh voice verification...' });
+
+    let amplitudeInterval = null;
+    let speakingTimeCounter = 0;
+    let noSpeechTimeout = null;
+
+    const cleanupVoiceResources = () => {
+      if (noSpeechTimeout) {
+        clearTimeout(noSpeechTimeout);
+        noSpeechTimeout = null;
+      }
+      if (amplitudeInterval) {
+        clearInterval(amplitudeInterval);
+        amplitudeInterval = null;
+      }
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.onresult = null;
+          recognitionRef.current.onerror = null;
+          recognitionRef.current.onend = null;
+          recognitionRef.current.stop();
+        } catch {
+          // ignore
+        }
+        recognitionRef.current = null;
+      }
+      fallbackModeRef.current = false;
+      setIsUsingFallback(false);
+    };
 
     try {
-      let stream = micStreamRef.current;
-      if (!stream) {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        micStreamRef.current = stream;
+      if (micStreamRef.current) {
+        try {
+          micStreamRef.current.getTracks().forEach(t => t.stop());
+        } catch {
+          // ignore
+        }
+        micStreamRef.current = null;
+      }
+      if (audioContextRef.current) {
+        try {
+          await audioContextRef.current.close();
+        } catch {
+          // ignore
+        }
+        audioContextRef.current = null;
       }
 
-      const recognition = new SpeechRecognitionAPI();
-      recognitionRef.current = recognition;
-      recognition.continuous = false;
-      recognition.interimResults = true;
-      recognition.lang = 'en-US';
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStreamRef.current = stream;
 
-      let finalTranscript = '';
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      const audioCtx = new AudioContextClass();
+      audioContextRef.current = audioCtx;
 
-      recognition.onresult = (event) => {
-        let interim = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const result = event.results[i];
-          if (result.isFinal) {
-            finalTranscript += result[0].transcript;
-          } else {
-            interim += result[0].transcript;
-          }
+      if (audioCtx.state === 'suspended') {
+        await audioCtx.resume();
+      }
+
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+
+      const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const speechRecSupported = !!SpeechRecognitionAPI;
+
+      amplitudeInterval = setInterval(() => {
+        if (!analyser) return;
+        analyser.getByteFrequencyData(dataArray);
+        let maxVal = 0;
+        for (let i = 0; i < bufferLength; i++) {
+          if (dataArray[i] > maxVal) maxVal = dataArray[i];
         }
-        const display = finalTranscript || interim;
-        setVoiceTranscript(display);
-        setAudioLevel(Math.min(100, Math.round((display.length / EXPECTED_PHRASE.length) * 100)));
-      };
+        const isSpeaking = maxVal > 75;
+        setAudioLevel(Math.round(maxVal / 2.55));
 
-      recognition.onerror = (event) => {
-        console.error("Speech recognition error:", event.error);
-        if (event.error === 'no-speech') {
-          setVoiceCheckMsg('No speech detected. Try again.');
-        } else {
-          setVoiceCheckMsg(`STT error: ${event.error}. Please retry.`);
-        }
-        setIsVoiceRecording(false);
-        setVoiceMatchStatus('idle');
-        recognitionRef.current = null;
-      };
+        if (fallbackModeRef.current || !speechRecSupported) {
+          if (isSpeaking) {
+            speakingTimeCounter += 60;
+            const progress = Math.min(100, Math.round(speakingTimeCounter / 10));
+            setVoiceProgress(progress);
 
-      recognition.onend = () => {
-        const spoken = finalTranscript.trim().toLowerCase().replace(/[^a-z0-9\s]/g, '');
-        const expected = EXPECTED_PHRASE.toLowerCase();
-
-        if (spoken === expected) {
-          setVoiceMatchStatus('matched');
-          setVoiceCheckMsg('Voice verification matched phrase successfully.');
-          setVerifiedCount(4);
-          addLog({ type: 'success', msg: 'Voice Verification Passed.' });
-          if (micStreamRef.current) {
-            micStreamRef.current.getTracks().forEach(t => t.stop());
-            micStreamRef.current = null;
+            if (progress >= 100) {
+              cleanupVoiceResources();
+              setIsVoiceRecording(false);
+              setVoiceCheckMsg('Voice verification matched phrase successfully (volume check).');
+              setVerifiedCount(4);
+              addLog({ type: 'success', msg: 'Voice Verification Passed (volume-based fallback).' });
+              if (micStreamRef.current) {
+                micStreamRef.current.getTracks().forEach(t => t.stop());
+                micStreamRef.current = null;
+              }
+            }
           }
         } else if (spoken) {
           setVoiceMatchStatus('mismatch');
@@ -510,23 +578,163 @@ export default function PreExamSecurityCheck() {
           setVoiceMatchStatus('idle');
           setVoiceCheckMsg('No phrase detected. Try again.');
         }
-        setIsVoiceRecording(false);
-        recognitionRef.current = null;
-      };
+      }, 100);
 
-      recognition.start();
+      if (speechRecSupported) {
+        const recognition = new SpeechRecognitionAPI();
+        recognitionRef.current = recognition;
+        recognition.continuous = false;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+
+        const coreWords = ["my", "identity", "is", "verified", "for", "secure", "exam"];
+        const matchThreshold = 6;
+
+        let finalTranscript = '';
+        let backendDebounce = null;
+
+        const verifyWithBackend = (transcript) => {
+          if (backendDebounce) clearTimeout(backendDebounce);
+          backendDebounce = setTimeout(async () => {
+            const examId = localStorage.getItem('active_exam_id');
+            const token = localStorage.getItem('session_token');
+            if (!examId || !token || !transcript.trim()) return;
+            try {
+              const res = await api.post(`/students/exams/${examId}/voice-verify`, {
+                session_token: token,
+                transcript: transcript.trim(),
+              });
+              if (res.passed) {
+                cleanupVoiceResources();
+                setIsVoiceRecording(false);
+                setVoiceCheckMsg('Voice verification matched phrase successfully.');
+                setVerifiedCount(4);
+                addLog({ type: 'success', msg: 'Voice Verification Passed.' });
+                if (micStreamRef.current) {
+                  micStreamRef.current.getTracks().forEach(t => t.stop());
+                  micStreamRef.current = null;
+                }
+              }
+            } catch (err) {
+              console.warn('Backend voice verification failed:', err);
+            }
+          }, 600);
+        };
+
+        const countOrderedMatches = (transcript) => {
+          const words = transcript.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
+          let wi = 0;
+          for (const w of words) {
+            if (wi < coreWords.length && w === coreWords[wi]) wi++;
+          }
+          return wi;
+        };
+
+        recognition.onstart = () => {
+          addLog({ type: 'info', msg: 'Speech recognition engine is listening...' });
+          setVoiceCheckMsg('Microphone listening... Speak the phrase above.');
+        };
+
+        recognition.onresult = (event) => {
+          let interimTranscript = '';
+          let finalPart = '';
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+              finalPart += event.results[i][0].transcript;
+            } else {
+              interimTranscript += event.results[i][0].transcript;
+            }
+          }
+          finalTranscript += finalPart;
+          const transcript = (finalTranscript + interimTranscript).trim();
+          setSpokenText(transcript);
+          setVoiceCheckMsg('Listening and transcribing...');
+
+          const matchedInOrder = countOrderedMatches(transcript);
+          const currentProgress = Math.min(100, Math.round((matchedInOrder / matchThreshold) * 100));
+          setVoiceProgress(currentProgress);
+
+          if (matchedInOrder >= 3) {
+            verifyWithBackend(transcript);
+          }
+        };
+
+        recognition.onerror = (e) => {
+          console.error("Speech recognition error:", e.error);
+          if (e.error !== 'no-speech') {
+            addLog({ type: 'error', msg: `Speech recognition error: ${e.error}. Switching to volume check.` });
+            fallbackModeRef.current = true;
+            setIsUsingFallback(true);
+            setVoiceCheckMsg('Speech recognition unavailable. Please speak to verify...');
+          } else {
+            addLog({ type: 'info', msg: 'Speech recognition detected no speech.' });
+          }
+        };
+
+        recognition.onend = () => {
+          const spoken = finalTranscript.trim().toLowerCase().replace(/[^a-z0-9\s]/g, '');
+          const expected = EXPECTED_PHRASE.toLowerCase();
+          if (spoken === expected) {
+            cleanupVoiceResources();
+            setIsVoiceRecording(false);
+            setVoiceMatchStatus('matched');
+            setVoiceCheckMsg('Voice verification matched phrase successfully.');
+            setVerifiedCount(4);
+            addLog({ type: 'success', msg: 'Voice Verification Passed.' });
+            if (micStreamRef.current) {
+              micStreamRef.current.getTracks().forEach(t => t.stop());
+              micStreamRef.current = null;
+            }
+          } else if (spoken) {
+            setVoiceMatchStatus('mismatch');
+            setVoiceCheckMsg(`Phrase did not match. You said: "${finalTranscript.trim()}"`);
+            addLog({ type: 'error', msg: `Voice mismatch. Expected phrase, got: "${finalTranscript.trim()}"` });
+          } else {
+            setVoiceMatchStatus('idle');
+            setVoiceCheckMsg('No phrase detected. Try again.');
+          }
+        };
+
+        recognition.start();
+
+        noSpeechTimeout = setTimeout(() => {
+          if (verifiedCountRef.current < 4 && isVoiceRecordingRef.current && !fallbackModeRef.current) {
+            addLog({ type: 'info', msg: 'No speech detected by STT after 8s, switching to volume-based check.' });
+            fallbackModeRef.current = true;
+            setIsUsingFallback(true);
+            setVoiceCheckMsg('Tap the mic button and speak clearly into the microphone...');
+          }
+        }, 8000);
+
+        const origOnResult = recognition.onresult;
+        recognition.onresult = (event) => {
+          clearTimeout(noSpeechTimeout);
+          origOnResult(event);
+        };
+
+        const origOnError = recognition.onerror;
+        recognition.onerror = (e) => {
+          clearTimeout(noSpeechTimeout);
+          origOnError(e);
+        };
+      } else {
+        addLog({ type: 'info', msg: 'Speech recognition not supported in this browser. Using volume-based check.' });
+        setVoiceCheckMsg('Speaking... (volume check active)');
+      }
+
     } catch (err) {
       console.error("Voice check recording failed:", err);
+      cleanupVoiceResources();
       setIsVoiceRecording(false);
       setVoiceMatchStatus('idle');
       setVoiceCheckMsg('Microphone access failed. Please allow mic permissions.');
     }
   };
 
-  const addLog = (entry) => {
+  function addLog(entry) {
     const timeStr = new Date().toLocaleTimeString();
     setLogs(prev => [{ time: timeStr, ...entry }, ...prev]);
-  };
+  }
 
   const handleAutoDetect = async () => {
     try {
@@ -724,14 +932,29 @@ export default function PreExamSecurityCheck() {
                                   <div className="w-2 h-2 bg-error rounded-full animate-pulse" />
                                   <span className="text-[10px] font-bold text-error uppercase">Listening...</span>
                                 </div>
-                                {voiceTranscript && (
+                                {spokenText && (
                                   <div className="text-xs bg-surface-container-high p-sm rounded-lg border border-outline-variant">
-                                    <span className="text-on-surface-variant">Recognized: </span>
-                                    <span className="font-bold text-primary">{voiceTranscript}</span>
+                                    <span className="text-on-surface-variant">Heard: </span>
+                                    <span className="font-bold text-primary">&ldquo;{spokenText}&rdquo;</span>
                                   </div>
+                                )}
+                                {isVoiceRecording && !isUsingFallback && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      fallbackModeRef.current = true;
+                                      setIsUsingFallback(true);
+                                      setVoiceCheckMsg('Bypassed speech engine. Please speak or make noise to verify.');
+                                      addLog({ type: 'info', msg: 'Manually switched to volume-based check.' });
+                                    }}
+                                    className="text-[10px] text-secondary hover:underline cursor-pointer text-center block mx-auto font-bold"
+                                  >
+                                    Having trouble? Switch to volume-based check
+                                  </button>
                                 )}
                                 <div className="w-full bg-surface-container-highest h-1 rounded-full overflow-hidden">
                                   <div className="h-full bg-secondary transition-all" style={{ width: `${audioLevel}%` }} />
+                                </div>
                                 </div>
                               </div>
                             )}

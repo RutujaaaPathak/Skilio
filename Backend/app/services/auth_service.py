@@ -22,8 +22,12 @@ from app.models.login_attempt import LoginAttempt
 from app.models.password_reset_token import PasswordResetToken
 from app.models.refresh_token import RefreshToken
 from app.models.totp_secret import TOTPSecret
+from app.models.department import Department
+from app.models.emergency_contact import EmergencyContact
+from app.models.institution import Institution
 from app.models.user import User
-from app.schemas.auth import UserCreate, UserLogin, UserUpdate
+from app.schemas.auth import UserCreate, UserLogin, UserUpdate, ProfileCompletionResponse
+from app.schemas.emergency_contact import EmergencyContactCreate, EmergencyContactUpdate
 from app.services.audit_service import AuditService
 from app.services.email_service import EmailService
 
@@ -31,18 +35,23 @@ from app.services.email_service import EmailService
 class AuthService:
     @staticmethod
     def _build_user_dict(user: User) -> dict:
+        institution_name = user.institution.name if user.institution else None
+        department_name = user.department.name if user.department else None
         return {
             "id": user.id,
             "name": user.name,
             "username": user.username,
             "email": user.email,
             "role": user.role,
-            "college": user.college,
-            "branch": user.branch,
+            "college": institution_name or user.college,
+            "branch": department_name or user.branch,
             "division": user.division,
             "year": user.year,
             "phone": user.phone,
             "batch": user.batch,
+            "institution_id": user.institution_id,
+            "department_id": user.department_id,
+            "roll_number": user.roll_number,
             "profile_photo_url": user.profile_photo_url,
             "department": user.department,
             "subjects": user.subjects,
@@ -289,10 +298,7 @@ class AuthService:
         user_agent: str | None = None,
     ) -> dict:
         if not refresh_token_str:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Refresh token is required",
-            )
+            return {"token": None}
 
         token_hash = compute_token_hash(refresh_token_str)
         stored = (
@@ -633,6 +639,180 @@ class AuthService:
         totp = db.query(TOTPSecret).filter(TOTPSecret.user_id == user.id).first()
         return {"is_enabled": bool(totp and totp.is_enabled)}
 
+    STUDENT_REQUIRED_FIELDS: dict[str, str] = {
+        "name": "Full Name",
+        "phone": "Phone Number",
+        "username": "Student ID",
+        "college": "College / Institution",
+        "branch": "Branch / Department",
+        "division": "Division",
+        "year": "Year / Semester",
+        "roll_number": "Roll Number",
+        "profile_photo_url": "Profile Photo",
+        "emergency_contact": "Emergency Contact",
+    }
+
+    @staticmethod
+    def get_emergency_contacts(db: Session, user: User) -> list[dict]:
+        contacts = (
+            db.query(EmergencyContact)
+            .filter(EmergencyContact.user_id == user.id)
+            .order_by(EmergencyContact.is_primary.desc(), EmergencyContact.created_at.desc())
+            .all()
+        )
+        return [
+            {
+                "id": c.id,
+                "user_id": c.user_id,
+                "name": c.name,
+                "relationship": c.relationship,
+                "phone": c.phone,
+                "alternate_phone": c.alternate_phone,
+                "email": c.email,
+                "address": c.address,
+                "is_primary": c.is_primary,
+                "note": c.note,
+                "created_at": c.created_at.isoformat() if isinstance(c.created_at, datetime) else c.created_at,
+                "updated_at": c.updated_at.isoformat() if isinstance(c.updated_at, datetime) else c.updated_at,
+            }
+            for c in contacts
+        ]
+
+    @staticmethod
+    def _ensure_single_primary(db: Session, user_id: int, exclude_id: int | None = None) -> None:
+        query = db.query(EmergencyContact).filter(
+            EmergencyContact.user_id == user_id,
+            EmergencyContact.is_primary == True,
+        )
+        if exclude_id is not None:
+            query = query.filter(EmergencyContact.id != exclude_id)
+        for c in query.all():
+            c.is_primary = False
+
+    @staticmethod
+    def create_emergency_contact(db: Session, user: User, data: EmergencyContactCreate) -> dict:
+        if data.is_primary:
+            AuthService._ensure_single_primary(db, user.id)
+        contact = EmergencyContact(
+            user_id=user.id,
+            name=data.name,
+            relationship=data.relationship,
+            phone=data.phone,
+            alternate_phone=data.alternate_phone,
+            email=data.email,
+            address=data.address,
+            is_primary=data.is_primary,
+            note=data.note,
+        )
+        db.add(contact)
+        db.commit()
+        db.refresh(contact)
+        return {
+            "id": contact.id,
+            "user_id": contact.user_id,
+            "name": contact.name,
+            "relationship": contact.relationship,
+            "phone": contact.phone,
+            "alternate_phone": contact.alternate_phone,
+            "email": contact.email,
+            "address": contact.address,
+            "is_primary": contact.is_primary,
+            "note": contact.note,
+            "created_at": contact.created_at.isoformat() if isinstance(contact.created_at, datetime) else contact.created_at,
+            "updated_at": contact.updated_at.isoformat() if isinstance(contact.updated_at, datetime) else contact.updated_at,
+        }
+
+    @staticmethod
+    def update_emergency_contact(db: Session, user: User, contact_id: int, data: EmergencyContactUpdate) -> dict:
+        contact = (
+            db.query(EmergencyContact)
+            .filter(EmergencyContact.id == contact_id, EmergencyContact.user_id == user.id)
+            .first()
+        )
+        if not contact:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Emergency contact not found",
+            )
+
+        update_data = data.model_dump(exclude_unset=True)
+        if update_data.get("is_primary"):
+            AuthService._ensure_single_primary(db, user.id, exclude_id=contact_id)
+
+        for field, value in update_data.items():
+            setattr(contact, field, value)
+
+        contact.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(contact)
+        return {
+            "id": contact.id,
+            "user_id": contact.user_id,
+            "name": contact.name,
+            "relationship": contact.relationship,
+            "phone": contact.phone,
+            "alternate_phone": contact.alternate_phone,
+            "email": contact.email,
+            "address": contact.address,
+            "is_primary": contact.is_primary,
+            "note": contact.note,
+            "created_at": contact.created_at.isoformat() if isinstance(contact.created_at, datetime) else contact.created_at,
+            "updated_at": contact.updated_at.isoformat() if isinstance(contact.updated_at, datetime) else contact.updated_at,
+        }
+
+    @staticmethod
+    def delete_emergency_contact(db: Session, user: User, contact_id: int) -> dict:
+        contact = (
+            db.query(EmergencyContact)
+            .filter(EmergencyContact.id == contact_id, EmergencyContact.user_id == user.id)
+            .first()
+        )
+        if not contact:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Emergency contact not found",
+            )
+        db.delete(contact)
+        db.commit()
+        return {"message": "Emergency contact deleted successfully."}
+
+    @staticmethod
+    def get_profile_completion(user: User) -> ProfileCompletionResponse:
+        completed: list[str] = []
+        missing: list[str] = []
+        for field, label in AuthService.STUDENT_REQUIRED_FIELDS.items():
+            if field == "emergency_contact":
+                has_contact = len(getattr(user, "emergency_contacts", []) or []) > 0
+                if has_contact:
+                    completed.append(label)
+                else:
+                    missing.append(label)
+            elif field == "college":
+                if user.college or user.institution_id:
+                    completed.append(label)
+                else:
+                    missing.append(label)
+            elif field == "branch":
+                if user.branch or user.department_id:
+                    completed.append(label)
+                else:
+                    missing.append(label)
+            else:
+                value = getattr(user, field, None)
+                if value:
+                    completed.append(label)
+                else:
+                    missing.append(label)
+        total = len(AuthService.STUDENT_REQUIRED_FIELDS)
+        pct = round((len(completed) / total) * 100) if total else 0
+        return ProfileCompletionResponse(
+            percentage=pct,
+            completed_fields=sorted(completed),
+            missing_fields=sorted(missing),
+            total_required=total,
+            is_complete=pct == 100,
+        )
+
     @staticmethod
     def update_profile(db: Session, user: User, data: UserUpdate) -> dict:
         update_data = data.model_dump(exclude_unset=True)
@@ -647,6 +827,15 @@ class AuthService:
 
         for field, value in update_data.items():
             setattr(user, field, value)
+
+        if "institution_id" in update_data and update_data["institution_id"] is not None:
+            inst = db.query(Institution).filter(Institution.id == update_data["institution_id"]).first()
+            if inst:
+                user.college = inst.name
+        if "department_id" in update_data and update_data["department_id"] is not None:
+            dept = db.query(Department).filter(Department.id == update_data["department_id"]).first()
+            if dept:
+                user.branch = dept.name
 
         user.updated_at = datetime.now(timezone.utc)
         db.commit()

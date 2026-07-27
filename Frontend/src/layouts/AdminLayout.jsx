@@ -35,6 +35,8 @@ export function AdminLayout({ title, subtitle, searchPlaceholder = 'Global syste
               <button
                 key={item.key}
                 onClick={() => navigate(item.path)}
+                aria-label={item.label}
+                aria-current={active ? 'page' : undefined}
                 className={`flex w-full items-center gap-sm rounded px-md py-sm text-left transition-all active:scale-95 ${active ? 'border-r-4 border-secondary bg-primary-container text-white' : 'text-on-surface-variant hover:bg-surface-variant'}`}
               >
                 <Icon name={item.icon} />
@@ -44,13 +46,13 @@ export function AdminLayout({ title, subtitle, searchPlaceholder = 'Global syste
           })}
         </nav>
         <div className="mt-auto border-t border-outline-variant p-md">
-          <button className="w-full rounded-lg bg-secondary px-md py-sm text-sm font-bold text-white transition-all hover:bg-secondary-container hover:text-black active:scale-95">
-            Generate Report
-          </button>
-          <div className="mt-md space-y-1">
-            <button className="flex w-full items-center gap-sm px-md py-xs text-sm font-medium text-on-surface-variant hover:text-on-surface"><Icon name="help" /> Help Center</button>
-            <button className="flex w-full items-center gap-sm px-md py-xs text-sm font-medium text-on-surface-variant hover:text-on-surface"><Icon name="logout" /> Logout</button>
-          </div>
+            <button aria-label="Generate Report" className="w-full rounded-lg bg-secondary px-md py-sm text-sm font-bold text-white transition-all hover:bg-secondary-container hover:text-black active:scale-95">
+              Generate Report
+            </button>
+            <div className="mt-md space-y-1">
+              <button aria-label="Help Center" className="flex w-full items-center gap-sm px-md py-xs text-sm font-medium text-on-surface-variant hover:text-on-surface"><Icon name="help" /> Help Center</button>
+              <button aria-label="Logout" className="flex w-full items-center gap-sm px-md py-xs text-sm font-medium text-on-surface-variant hover:text-on-surface"><Icon name="logout" /> Logout</button>
+            </div>
         </div>
       </aside>
 
@@ -67,9 +69,9 @@ export function AdminLayout({ title, subtitle, searchPlaceholder = 'Global syste
             </nav>
           </div>
           <div className="flex items-center gap-md">
-            <button className="rounded-lg bg-primary px-md py-2 text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95">{actionLabel}</button>
-            <button className="rounded-full p-2 text-on-surface-variant hover:bg-surface-container-highest"><Icon name="notifications" /></button>
-            <button className="rounded-full p-2 text-on-surface-variant hover:bg-surface-container-highest"><Icon name="apps" /></button>
+            <button aria-label={actionLabel} className="rounded-lg bg-primary px-md py-2 text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95">{actionLabel}</button>
+            <button aria-label="Notifications" className="rounded-full p-2 text-on-surface-variant hover:bg-surface-container-highest"><Icon name="notifications" /></button>
+            <button aria-label="Applications" className="rounded-full p-2 text-on-surface-variant hover:bg-surface-container-highest"><Icon name="apps" /></button>
             <div className="flex h-8 w-8 items-center justify-center rounded-full border border-outline-variant bg-primary-container text-sm font-bold text-white">AR</div>
           </div>
         </header>

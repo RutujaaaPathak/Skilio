@@ -18,7 +18,14 @@ export const authService = {
   disableTotp: (password) => api.post('/auth/totp/disable', { password }),
   verifyTotpLogin: (tempToken, code) => api.post('/auth/totp/verify', { temp_token: tempToken, code }),
   getTotpStatus: () => api.get('/auth/totp/status'),
+  getProfileCompletion: () => api.get('/auth/me/completion'),
   updateProfile: (data) => api.put('/auth/me', data),
+  getInstitutions: () => api.get('/institutions'),
+  getDepartments: (institutionId) => api.get(`/departments${institutionId ? `?institution_id=${institutionId}` : ''}`),
+  getEmergencyContacts: () => api.get('/auth/me/emergency-contacts'),
+  createEmergencyContact: (data) => api.post('/auth/me/emergency-contacts', data),
+  updateEmergencyContact: (id, data) => api.put(`/auth/me/emergency-contacts/${id}`, data),
+  deleteEmergencyContact: (id) => api.delete(`/auth/me/emergency-contacts/${id}`),
   uploadPhoto: (file) => {
     const formData = new FormData();
     formData.append('file', file);

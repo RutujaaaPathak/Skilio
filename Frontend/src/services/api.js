@@ -30,8 +30,11 @@ async function attemptRefresh() {
     });
     if (res.ok) {
       const data = await res.json();
-      accessToken = data.token;
-      return data.token;
+      if (data.token) {
+        accessToken = data.token;
+        return data.token;
+      }
+      return null;
     }
     clearAccessToken();
     window.dispatchEvent(new CustomEvent('auth:logout'));
@@ -86,6 +89,10 @@ async function request(endpoint, options = {}) {
       message = body.detail.map((d) => d.msg).join('; ');
     } else if (typeof body.detail === 'string') {
       message = body.detail;
+    }
+    if (res.status >= 500) {
+      console.error(`[API Error] ${res.status} ${endpoint}:`, body);
+      message = 'A server error occurred. Please try again later.';
     }
     const err = new Error(message);
     err.status = res.status;

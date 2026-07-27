@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-error-container: #ffdad6;
   --color-on-primary-container: #8293ba;
@@ -223,3 +225,65 @@ body {
   .bento-grid { grid-template-columns: 1fr; }
   .bento-grid > * { grid-column: 1 / -1 !important; }
 }
+
+.dark {
+  --color-error-container: #93000a;
+  --color-on-primary-container: #b6c6f0;
+  --color-on-primary-fixed-variant: #b6c6f0;
+  --color-surface-container-lowest: #0e1112;
+  --color-primary-fixed: #071b3b;
+  --color-on-surface: #e1e3e4;
+  --color-surface-container: #1a1c1e;
+  --color-on-secondary-fixed: #ffdcc2;
+  --color-surface-container-highest: #2e3132;
+  --color-on-error: #601410;
+  --color-surface: #131516;
+  --color-secondary-fixed-dim: #8f4e00;
+  --color-secondary-fixed: #2e1500;
+  --color-tertiary-fixed: #002114;
+  --color-inverse-on-surface: #191c1d;
+  --color-secondary-container: #683700;
+  --color-on-tertiary-container: #68dba9;
+  --color-surface-tint: #b6c6f0;
+  --color-secondary: #ffb77a;
+  --color-on-error-container: #ffdad6;
+  --color-surface-variant: #44474e;
+  --color-on-tertiary: #001c10;
+  --color-inverse-primary: #4e5e82;
+  --color-outline: #8e9099;
+  --color-on-tertiary-fixed: #85f8c4;
+  --color-on-surface-variant: #c5c6cf;
+  --color-primary-fixed-dim: #4e5e82;
+  --color-on-background: #e1e3e4;
+  --color-on-primary: #031636;
+  --color-outline-variant: #44474e;
+  --color-on-secondary-fixed-variant: #ffb77a;
+  --color-surface-dim: #0e1112;
+  --color-tertiary-fixed-dim: #29a678;
+  --color-on-secondary-container: #fe9832;
+  --color-surface-container-low: #191c1d;
+  --color-inverse-surface: #e1e3e4;
+  --color-tertiary-container: #005137;
+  --color-on-secondary: #2e1500;
+  --color-surface-bright: #393b3d;
+  --color-error: #ffb4ab;
+  --color-on-primary-fixed: #d8e2ff;
+  --color-on-tertiary-fixed-variant: #68dba9;
+  --color-primary-container: #364669;
+  --color-surface-container-high: #242729;
+  --color-tertiary: #68dba9;
+  --color-primary: #b6c6f0;
+  --color-background: #131516;
+}
+
+.dark body {
+  background: #131516;
+  color: #e1e3e4;
+}
+
+.dark .bento-card { background: #1a1c1e; border-color: #2e3132; }
+.dark .bento-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,.3); }
+.dark .chart-grid { background-image: radial-gradient(circle at 2px 2px #2e3132 1px, transparent 0); }
+.dark .custom-scrollbar::-webkit-scrollbar-track { background: #1a1c1e; }
+.dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #44474e; }
+.dark .card { box-shadow: 0 12px 35px rgba(0, 0, 0, 0.4); }
