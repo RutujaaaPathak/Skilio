@@ -270,3 +270,21 @@ def _run_migrations():
                 conn.execute(text("ALTER TABLE notifications ADD COLUMN is_read BOOLEAN DEFAULT 0"))
     except Exception:
         pass
+
+
+    try:
+        q_columns = {c["name"] for c in inspector.get_columns("questions")}
+        with engine.begin() as conn:
+            if "is_deleted" not in q_columns:
+                conn.execute(text("ALTER TABLE questions ADD COLUMN is_deleted BOOLEAN DEFAULT 0"))
+            if "deleted_at" not in q_columns:
+                conn.execute(text("ALTER TABLE questions ADD COLUMN deleted_at DATETIME"))
+    except Exception:
+        pass
+
+    try:
+        qv_columns = {c["name"] for c in inspector.get_columns("question_versions")}
+        with engine.begin() as conn:
+            conn.execute(text("CREATE TABLE IF NOT EXISTS question_versions (id INTEGER PRIMARY KEY AUTOINCREMENT, question_id INTEGER NOT NULL, version_number INTEGER NOT NULL, snapshot TEXT NOT NULL, changed_by INTEGER NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (question_id) REFERENCES questions(id), FOREIGN KEY (changed_by) REFERENCES users(id))"))
+    except Exception:
+        pass

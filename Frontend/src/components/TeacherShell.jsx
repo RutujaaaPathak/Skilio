@@ -27,7 +27,7 @@ function Sidebar({ page, setPage, closeSidebar }) {
         <h1 className="text-2xl font-extrabold text-primary">Skillo</h1>
         <p className="text-xs font-semibold text-on-surface-variant">Teacher Portal</p>
       </div>
-      <button onClick={closeSidebar} className="lg:hidden p-xs hover:bg-surface-container-high rounded-full"><Icon className="text-primary">close</Icon></button>
+      <button onClick={closeSidebar} aria-label="Close sidebar" className="lg:hidden p-xs hover:bg-surface-container-high rounded-full"><Icon className="text-primary">close</Icon></button>
     </div>
     <nav className="flex-1 px-sm space-y-xs">
       {nav.map(([icon, label, key]) => {
@@ -46,7 +46,7 @@ function Sidebar({ page, setPage, closeSidebar }) {
   </aside>
 }
 
-export default function TeacherShell({ children, page, setPage, title = 'Teacher Portal', search = false }) {
+export default function TeacherShell({ children, page, setPage, title = 'Teacher Portal', search = false, searchValue = '', onSearchChange }) {
   const { user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const initials = user?.name
@@ -68,20 +68,20 @@ export default function TeacherShell({ children, page, setPage, title = 'Teacher
 
     <header className="teacher-top flex justify-between items-center lg:w-[calc(100%_-_16rem)] lg:ml-64 px-md lg:px-lg h-16 sticky top-0 bg-surface border-b border-outline-variant z-40 backdrop-blur-md bg-white/95">
       <div className="flex items-center gap-md flex-1 min-w-0">
-        <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-xs hover:bg-surface-container-high rounded-full transition-colors"><Icon className="text-primary">menu</Icon></button>
+        <button onClick={() => setSidebarOpen(true)} aria-label="Open navigation menu" className="lg:hidden p-xs hover:bg-surface-container-high rounded-full transition-colors"><Icon className="text-primary">menu</Icon></button>
         <button onClick={() => setPage('dashboard')} className="hidden lg:inline-flex p-xs hover:bg-surface-container-high rounded-full transition-colors"><Icon className="text-primary">arrow_back</Icon></button>
         <h2 className="text-xl font-bold text-primary whitespace-nowrap truncate">{title}</h2>
         {search && <div className="relative w-96 hidden lg:block ml-md">
           <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-outline">search</Icon>
-          <input className="w-full pl-10 pr-4 py-2 bg-surface-container-low border border-outline-variant rounded-full text-sm focus-ring" placeholder="Search questions, topics, students..." />
+          <input value={searchValue} onChange={e => onSearchChange?.(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-surface-container-low border border-outline-variant rounded-full text-sm focus-ring" placeholder="Search questions, topics, students..." />
         </div>}
       </div>
       <div className="flex items-center gap-md shrink-0">
-        <button className="relative text-on-surface-variant hover:text-secondary"><Icon>notifications</Icon><span className="absolute top-0 right-0 w-2 h-2 bg-secondary-container rounded-full border-2 border-surface" /></button>
-        <button className="text-on-surface-variant hover:text-secondary"><Icon>history_edu</Icon></button>
+        <button aria-label="Notifications" className="relative text-on-surface-variant hover:text-secondary"><Icon>notifications</Icon><span className="absolute top-0 right-0 w-2 h-2 bg-secondary-container rounded-full border-2 border-surface" /></button>
+        <button aria-label="AI History" className="text-on-surface-variant hover:text-secondary"><Icon>history_edu</Icon></button>
         <div className="h-8 w-8 rounded-full overflow-hidden border border-outline-variant bg-primary-container text-white grid place-items-center text-sm font-bold">
           {user?.profile_photo_url ? (
-            <img src={user.profile_photo_url} alt={user.name} className="w-full h-full object-cover" />
+            <img src={user.profile_photo_url} alt={user.name} className="w-full h-full object-cover" role="img" aria-label={user.name} />
           ) : (
             initials
           )}

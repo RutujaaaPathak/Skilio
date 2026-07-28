@@ -3,7 +3,7 @@ import { Icon } from '../../../components/TeacherShell.jsx'
 import { questionService } from '../../../services/questionService.js'
 
 export default function AIGenerateModal({ onClose, onSaved }) {
-  const [form, setForm] = useState({ subject: '', topic: '', difficulty: 'medium', question_types: ['mcq'], count: 5 })
+  const [form, setForm] = useState({ subject: '', topic: '', difficulties: ['medium'], question_types: ['mcq'], count: 5 })
   const [generated, setGenerated] = useState([])
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [step, setStep] = useState('form')
@@ -13,6 +13,15 @@ export default function AIGenerateModal({ onClose, onSaved }) {
 
   function set(field, value) {
     setForm(prev => ({ ...prev, [field]: value }))
+  }
+
+  function toggleDifficulty(d) {
+    setForm(prev => {
+      const diffs = prev.difficulties.includes(d)
+        ? prev.difficulties.filter(x => x !== d)
+        : [...prev.difficulties, d]
+      return { ...prev, difficulties: diffs.length ? diffs : ['medium'] }
+    })
   }
 
   function toggleType(t) {
@@ -89,14 +98,18 @@ export default function AIGenerateModal({ onClose, onSaved }) {
                 <input value={form.topic} onChange={e => set('topic', e.target.value)} className="input" placeholder="e.g. Thermodynamics" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-md">
+            <div>
               <div>
-                <label className="text-xs font-bold text-on-surface-variant block mb-xs">Difficulty</label>
-                <select value={form.difficulty} onChange={e => set('difficulty', e.target.value)} className="input">
-                  <option value="easy">Easy</option>
-                  <option value="medium">Medium</option>
-                  <option value="hard">Hard</option>
-                </select>
+                <label className="text-xs font-bold text-on-surface-variant block mb-xs">Difficulties</label>
+                <div className="flex gap-sm">
+                  {['easy', 'medium', 'hard'].map(d => (
+                    <label key={d} className={`flex items-center gap-sm px-md py-sm border rounded-xl cursor-pointer ${form.difficulties.includes(d) ? 'border-secondary-container bg-secondary-container/10 text-secondary font-bold' : 'border-outline-variant hover:bg-surface-container-low'}`}>
+                      <input type="checkbox" checked={form.difficulties.includes(d)} onChange={() => toggleDifficulty(d)} className="hidden" />
+                      <Icon className="text-sm">{form.difficulties.includes(d) ? 'check_circle' : 'radio_button_unchecked'}</Icon>
+                      {d.charAt(0).toUpperCase() + d.slice(1)}
+                    </label>
+                  ))}
+                </div>
               </div>
               <div>
                 <label className="text-xs font-bold text-on-surface-variant block mb-xs">Number of Questions</label>

@@ -15,6 +15,7 @@ from app.models.totp_secret import TOTPSecret
 from app.models.emergency_contact import EmergencyContact
 from app.models.institution import Institution
 from app.models.department import Department
+from app.models.question_version import QuestionVersion
 
 __all__ = [
     "User",
@@ -38,4 +39,5 @@ __all__ = [
     "EmergencyContact",
     "Institution",
     "Department",
+    "QuestionVersion",
 ]
