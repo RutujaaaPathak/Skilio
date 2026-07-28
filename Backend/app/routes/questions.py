@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_current_user, require_teacher_or_admin
 from app.database import get_db
 from app.models.user import User
-from app.schemas.question import AIGenerateRequest, AIGenerateResponse, BulkDuplicateRequest, BulkUpdateRequest, PaginatedQuestionResponse, QuestionAnalytics, QuestionBulkCreate, QuestionCreate, QuestionResponse, QuestionUpdate, SuggestResponse, VersionEntry
+from app.schemas.question import AIGenerateRequest, AIGenerateResponse, BulkDuplicateRequest, BulkUpdateRequest, DuplicateCheckRequest, DuplicateCheckResponse, GenerateEquivalentRequest, PaginatedQuestionResponse, QuestionAnalytics, QuestionBulkCreate, QuestionCreate, QuestionResponse, QuestionUpdate, SuggestResponse, VersionEntry
 from app.services.question_service import QuestionService
 
 
@@ -108,10 +108,30 @@ def bulk_delete_questions(
 @router.post("/generate", response_model=AIGenerateResponse)
 def generate_questions(
     body: AIGenerateRequest,
+    db: Session = Depends(get_db),
     current_user: User = Depends(require_teacher_or_admin),
 ):
-    questions = QuestionService.generate_with_ai(body)
+    questions = QuestionService.generate_with_ai(body, db)
     return {"questions": questions}
+
+
+@router.post("/generate-equivalent", response_model=AIGenerateResponse)
+def generate_equivalent_questions(
+    body: GenerateEquivalentRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_teacher_or_admin),
+):
+    questions = QuestionService.generate_equivalent(db, body.question_id, current_user, body.count)
+    return {"questions": questions}
+
+
+@router.post("/check-duplicates", response_model=DuplicateCheckResponse)
+def check_duplicate_questions(
+    body: DuplicateCheckRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return QuestionService.check_duplicates(db, current_user, body.question_texts)
 
 
 @router.get("/export/csv")

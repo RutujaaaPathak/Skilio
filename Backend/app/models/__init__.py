@@ -16,6 +16,7 @@ from app.models.emergency_contact import EmergencyContact
 from app.models.institution import Institution
 from app.models.department import Department
 from app.models.question_version import QuestionVersion
+from app.models.syllabus import Syllabus
 
 __all__ = [
     "User",
@@ -40,4 +41,5 @@ __all__ = [
     "Institution",
     "Department",
     "QuestionVersion",
+    "Syllabus",
 ]

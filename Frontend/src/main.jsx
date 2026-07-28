@@ -6,6 +6,7 @@ import './index.css';
 import { AuthProvider } from './context/AuthContext.jsx';
 import { AdminProvider } from './context/AdminContext.jsx';
 import { ThemeProvider } from './context/ThemeContext.jsx';
+import { ToastProvider } from './components/Toast.jsx';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -13,7 +14,9 @@ createRoot(document.getElementById('root')).render(
       <AuthProvider>
         <AdminProvider>
           <ThemeProvider>
-            <App />
+            <ToastProvider>
+              <App />
+            </ToastProvider>
           </ThemeProvider>
         </AdminProvider>
       </AuthProvider>

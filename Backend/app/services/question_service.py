@@ -2,7 +2,7 @@ import csv
 import io
 import json
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from fastapi import HTTPException, UploadFile, status
 from openai import OpenAI
@@ -13,6 +13,13 @@ from app.core.config import settings
 from app.models.exam import ExamQuestion
 from app.models.question import Question
 from app.models.question_version import QuestionVersion
+from app.services.prompts import (
+    PROMPT_VERSION,
+    prompt_generate_equivalent,
+    prompt_generate_topic,
+    prompt_suggest_improvements,
+    validate_ai_output,
+)
 from app.models.user import User
 from app.schemas.question import QuestionCreate, QuestionUpdate
 
@@ -58,6 +65,11 @@ class QuestionService:
             correct_answer=data.correct_answer,
             marks=data.marks,
             explanation=data.explanation,
+            is_ai_generated=data.is_ai_generated,
+            blooms_level=data.blooms_level,
+            ai_model=data.ai_model,
+            ai_prompt_used=data.ai_prompt_used,
+            generation_source=data.generation_source,
         )
         db.add(question)
         db.commit()
@@ -215,6 +227,11 @@ class QuestionService:
                 correct_answer=data.correct_answer,
                 marks=data.marks,
                 explanation=data.explanation,
+                is_ai_generated=data.is_ai_generated,
+                blooms_level=data.blooms_level,
+                ai_model=data.ai_model,
+                ai_prompt_used=data.ai_prompt_used,
+                generation_source=data.generation_source,
             )
             db.add(question)
             created.append(question)
@@ -511,29 +528,31 @@ class QuestionService:
         return settings.GROQ_MODEL if settings.GROQ_API_KEY else settings.OPENAI_MODEL
 
     @staticmethod
-    def generate_with_ai(data) -> list[dict]:
+    def generate_with_ai(data, db: Session = None) -> list[dict]:
         client = QuestionService._get_ai_client()
         model = QuestionService._get_ai_model()
-        diffs_str = ", ".join(data.difficulties)
-        types_str = ", ".join(data.question_types)
-        prompt = f"""Generate {data.count} questions about {data.topic} in {data.subject}.
-Difficulties to include: {diffs_str}.
-Question types to include: {types_str}.
-Return ONLY a JSON object with a "questions" key containing an array of objects with these fields:
-- subject: "{data.subject}"
-- topic: "{data.topic}"
-- difficulty: one of {diffs_str}
-- question_type: one of {types_str}
-- question_text: the question
-- options: array of strings (only for mcq, at least 2, null otherwise)
-- correct_answer: the correct answer
-- marks: 1
-- explanation: brief explanation of the answer
-Valid JSON only, no markdown, no code fences."""
+        syllabus_context = ""
+        if data.syllabus_ids and db:
+            from app.models.syllabus import Syllabus
+            entries = db.query(Syllabus).filter(Syllabus.id.in_(data.syllabus_ids), Syllabus.is_active == True).all()
+            if entries:
+                from app.services.prompts import _format_syllabus_context
+                syllabus_context = _format_syllabus_context(entries)
+        blooms_levels = list(data.blooms_levels) if data.blooms_levels else None
+        prompt = prompt_generate_topic(
+            subject=data.subject,
+            topic=data.topic,
+            difficulties=data.difficulties,
+            types=data.question_types,
+            count=data.count,
+            marks=data.marks,
+            blooms_levels=blooms_levels,
+            syllabus_context=syllabus_context,
+        )
         kwargs = {
             "model": model,
             "messages": [
-                {"role": "system", "content": "You are a teacher creating exam questions. Return only valid JSON."},
+                {"role": "system", "content": "You are an expert exam question writer. Return only valid JSON."},
                 {"role": "user", "content": prompt},
             ],
             "temperature": 0.7,
@@ -543,7 +562,7 @@ Valid JSON only, no markdown, no code fences."""
             kwargs["response_format"] = {"type": "json_object"}
         try:
             response = client.chat.completions.create(**kwargs)
-        except Exception as e:
+        except Exception:
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="AI generation failed. Please try again later.")
         raw = response.choices[0].message.content
         try:
@@ -553,10 +572,17 @@ Valid JSON only, no markdown, no code fences."""
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="AI returned invalid JSON")
         if not questions:
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="AI returned no questions")
+        validation_errors = validate_ai_output(questions)
+        if validation_errors:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="AI output validation failed: " + "; ".join(validation_errors),
+            )
         for q in questions:
-            q.setdefault("marks", 1)
+            q.setdefault("marks", data.marks)
             q.setdefault("explanation", None)
             q.setdefault("options", None)
+            q.setdefault("blooms_level", None)
         return questions[:data.count]
 
     @staticmethod
@@ -640,6 +666,7 @@ Valid JSON only, no markdown, no code fences."""
     @staticmethod
     def get_analytics(db: Session, user: User) -> dict:
         from sqlalchemy import case, func
+        from sqlalchemy.sql import extract
         base = db.query(Question).filter(Question.is_deleted == False)
         if user.role == "teacher":
             base = base.filter(Question.teacher_id == user.id)
@@ -656,11 +683,23 @@ Valid JSON only, no markdown, no code fences."""
         if total == 0:
             avg_diff = "N/A"
         else:
-            diff_scores = {"easy": 1, "medium": 2, "hard": 3}
             score_row = base.with_entities(func.sum(case((Question.difficulty == "hard", 3), (Question.difficulty == "easy", 1), else_=2))).first()
             total_score = score_row[0] or 0
             avg_score = round(total_score / total)
             avg_diff = {1: "easy", 2: "medium", 3: "hard"}.get(avg_score, "medium")
+        total_ai_generated = base.filter(Question.is_ai_generated == True).count()
+        ai_generated_saved = base.filter(Question.is_ai_generated == True, Question.generation_source == "generate").count()
+        bloom_rows = base.with_entities(Question.blooms_level, func.count(Question.id)).filter(Question.blooms_level != None).group_by(Question.blooms_level).all()
+        by_blooms_level = {r[0]: r[1] for r in bloom_rows} if bloom_rows else {}
+        eight_weeks_ago = datetime.now(timezone.utc) - timedelta(days=56)
+        ai_trend_base = base.filter(Question.is_ai_generated == True, Question.created_at >= eight_weeks_ago)
+        trend_rows = ai_trend_base.with_entities(
+            func.strftime("%Y-%W", Question.created_at).label("week"),
+            func.count(Question.id),
+        ).group_by("week").order_by("week").all()
+        ai_generation_trend = [{"week": r[0], "count": r[1]} for r in trend_rows]
+        recent_ai = base.filter(Question.is_ai_generated == True).order_by(Question.created_at.desc()).limit(5).all()
+        recent_ai_activity = [{"id": q.id, "question_text": q.question_text[:100], "blooms_level": q.blooms_level, "created_at": q.created_at.isoformat() if q.created_at else None} for q in recent_ai]
         return {
             "total_questions": total,
             "by_difficulty": by_difficulty,
@@ -669,6 +708,11 @@ Valid JSON only, no markdown, no code fences."""
             "recently_added": recently_added,
             "unused": unused,
             "average_difficulty": avg_diff,
+            "total_ai_generated": total_ai_generated,
+            "ai_generated_saved": ai_generated_saved,
+            "by_blooms_level": by_blooms_level,
+            "ai_generation_trend": ai_generation_trend,
+            "recent_ai_activity": recent_ai_activity,
         }
 
     @staticmethod
@@ -690,3 +734,93 @@ Valid JSON only, no markdown, no code fences."""
                 "created_at": v.created_at.isoformat() if v.created_at else None,
             })
         return result
+
+    @staticmethod
+    def generate_equivalent(db: Session, question_id: int, user: User, count: int = 1) -> list[dict]:
+        question = QuestionService.get_by_id(db, question_id, user)
+        client = QuestionService._get_ai_client()
+        model = QuestionService._get_ai_model()
+
+        options_str = ""
+        if question.question_type == "mcq" and question.options:
+            try:
+                opts = json.loads(question.options)
+                if isinstance(opts, list):
+                    options_str = "\n".join(f"  {chr(65+i)}. {o}" for i, o in enumerate(opts))
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        prompt = prompt_generate_equivalent(
+            count=count,
+            subject=question.subject,
+            topic=question.topic,
+            difficulty=question.difficulty,
+            marks=question.marks,
+            question_type=question.question_type,
+            question_text=question.question_text,
+            options_str=options_str,
+            correct_answer=question.correct_answer,
+            explanation=question.explanation,
+            blooms_level=question.blooms_level,
+        )
+
+        kwargs = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": "You are a teacher creating equivalent exam questions. Return only valid JSON."},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.8,
+        }
+        use_openai = bool(settings.OPENAI_API_KEY) and not settings.GROQ_API_KEY
+        if use_openai:
+            kwargs["response_format"] = {"type": "json_object"}
+
+        try:
+            response = client.chat.completions.create(**kwargs)
+        except Exception:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="AI generation failed. Please try again later.")
+
+        raw = response.choices[0].message.content
+        try:
+            parsed = json.loads(raw)
+            questions = parsed if isinstance(parsed, list) else parsed.get("questions", [])
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="AI returned invalid JSON")
+        if not questions:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="AI returned no questions")
+        for q in questions:
+            q.setdefault("marks", question.marks)
+            q.setdefault("explanation", None)
+            q.setdefault("options", None)
+            q.setdefault("blooms_level", question.blooms_level)
+        return questions[:count]
+
+    @staticmethod
+    def check_duplicates(db: Session, user: User, question_texts: list[str]) -> dict:
+        from sqlalchemy import func
+        results = []
+        total_duplicates = 0
+        for text in question_texts:
+            normalized = text.strip().lower()[:200]
+            existing = db.query(Question).filter(
+                Question.teacher_id == user.id,
+                Question.is_deleted == False,
+                func.lower(func.substr(Question.question_text, 1, 200)) == normalized,
+            ).first()
+            if existing:
+                results.append({
+                    "text": text,
+                    "is_duplicate": True,
+                    "existing_question_id": existing.id,
+                    "existing_question_text": existing.question_text,
+                })
+                total_duplicates += 1
+            else:
+                results.append({
+                    "text": text,
+                    "is_duplicate": False,
+                    "existing_question_id": None,
+                    "existing_question_text": None,
+                })
+        return {"results": results, "total_duplicates": total_duplicates}

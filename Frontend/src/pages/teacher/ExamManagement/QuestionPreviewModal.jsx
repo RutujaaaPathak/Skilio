@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Icon } from '../../../components/TeacherShell.jsx'
 import { questionService } from '../../../services/questionService.js'
+import { useToast } from '../../../components/Toast.jsx'
 
 function parseOptions(raw) {
   if (!raw) return []
@@ -11,7 +12,8 @@ function parseOptions(raw) {
   } catch { return [] }
 }
 
-export default function QuestionPreviewModal({ question, onClose }) {
+export default function QuestionPreviewModal({ question, onClose, onSaved }) {
+  const { addToast } = useToast()
   if (!question) return null
   const options = parseOptions(question.options)
   const isMcq = question.question_type === 'mcq'
@@ -20,6 +22,7 @@ export default function QuestionPreviewModal({ question, onClose }) {
   const [versions, setVersions] = useState(null)
   const [versionsLoading, setVersionsLoading] = useState(false)
   const [showVersions, setShowVersions] = useState(false)
+  const [equivLoading, setEquivLoading] = useState(false)
 
   async function handleSuggest() {
     setSuggestLoading(true)
@@ -47,6 +50,33 @@ export default function QuestionPreviewModal({ question, onClose }) {
     }
   }
 
+  async function handleGenerateEquivalent() {
+    setEquivLoading(true)
+    try {
+      const result = await questionService.generateEquivalent(question.id, 1)
+      const eq = result.questions?.[0]
+      if (!eq) return
+      const created = await questionService.create({
+        subject: eq.subject,
+        topic: eq.topic,
+        difficulty: eq.difficulty,
+        question_type: eq.question_type,
+        question_text: eq.question_text,
+        options: eq.options || null,
+        correct_answer: eq.correct_answer,
+        marks: eq.marks || question.marks,
+        explanation: eq.explanation || null,
+        is_ai_generated: true,
+      })
+      if (onSaved) onSaved(created)
+      addToast('Equivalent question saved to Question Bank', 'success')
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setEquivLoading(false)
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose} onKeyDown={e => e.key === "Escape" && onClose()} role="dialog" aria-modal="true" aria-label="Question preview">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto m-4" onClick={e => e.stopPropagation()}>
@@ -64,6 +94,9 @@ export default function QuestionPreviewModal({ question, onClose }) {
             </span>
             <span className="pill bg-surface-container-highest text-on-surface-variant text-xs">{question.question_type.replace('_', ' ')}</span>
             <span className="pill bg-surface-container-high text-on-surface-variant text-xs">{question.marks} mark(s)</span>
+            {question.blooms_level && (
+              <span className="pill bg-tertiary-container text-tertiary text-xs">{question.blooms_level}</span>
+            )}
           </div>
 
           <div className="bg-surface-container-low rounded-xl p-lg">
@@ -129,12 +162,15 @@ export default function QuestionPreviewModal({ question, onClose }) {
           )}
 
 <div className="flex justify-between gap-sm pt-md border-t border-outline-variant">
-            <div className="flex gap-sm">
+            <div className="flex gap-sm flex-wrap">
               <button onClick={handleSuggest} disabled={suggestLoading} aria-label="Get AI suggestions" className="btn-secondary px-md py-sm text-sm flex items-center gap-xs">
                 <Icon className="text-sm">smart_toy</Icon>{suggestLoading ? 'Analyzing...' : 'AI Suggest'}
               </button>
               <button onClick={handleVersions} disabled={versionsLoading} aria-label="View version history" className="btn-secondary px-md py-sm text-sm flex items-center gap-xs">
                 <Icon className="text-sm">history</Icon>{versionsLoading ? 'Loading...' : 'History'}
+              </button>
+              <button onClick={handleGenerateEquivalent} disabled={equivLoading} aria-label="Generate equivalent question" className="btn-secondary px-md py-sm text-sm flex items-center gap-xs">
+                <Icon className="text-sm">{equivLoading ? 'sync' : 'auto_awesome'}</Icon>{equivLoading ? 'Generating...' : 'Equivalent'}
               </button>
             </div>
             <button onClick={onClose} className="btn-secondary px-lg py-sm">Close</button>

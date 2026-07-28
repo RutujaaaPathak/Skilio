@@ -3,6 +3,7 @@ import TeacherShell, { Icon, StatCard } from '../../../components/TeacherShell.j
 import { useAuth } from '../../../context/AuthContext.jsx'
 import { examService } from '../../../services/examService.js'
 import { teacherService } from '../../../services/teacherService.js'
+import { questionService } from '../../../services/questionService.js'
 
 function getGreeting() {
   const hour = new Date().getHours()
@@ -22,6 +23,7 @@ export default function TeacherDashboard({ page, setPage }) {
   const [announcements, setAnnouncements] = useState(null)
   const [trends, setTrends] = useState(null)
   const [analytics, setAnalytics] = useState(null)
+  const [questionAnalytics, setQuestionAnalytics] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [subjectFilter, setSubjectFilter] = useState('')
@@ -74,7 +76,7 @@ export default function TeacherDashboard({ page, setPage }) {
       const prevQp = prevDateParams ? ((pqp) => { if (analyticsParams.subject) pqp.set('subject', analyticsParams.subject); if (prevDateParams.date_from) pqp.set('date_from', prevDateParams.date_from.toISOString().split('T')[0]); if (prevDateParams.date_to) pqp.set('date_to', prevDateParams.date_to.toISOString().split('T')[0]); return pqp })(new URLSearchParams()) : null
       const previousFetch = prevQp ? teacherService.getAnalytics(prevQp.toString()).catch(() => null) : Promise.resolve(null)
 
-      const [examsData, dashData, perfData, pendingData, actData, alertData, annData, trendData, analyticsData, previousData] = await Promise.all([
+      const [examsData, dashData, perfData, pendingData, actData, alertData, annData, trendData, analyticsData, previousData, qAnalyticsData] = await Promise.all([
         examService.list(),
         teacherService.getDashboard(),
         teacherService.getPerformance(),
@@ -85,6 +87,7 @@ export default function TeacherDashboard({ page, setPage }) {
         teacherService.getTrends(),
         qs ? teacherService.getAnalytics(qs) : teacherService.getAnalytics(),
         previousFetch,
+        questionService.analytics(),
       ])
       setExams(examsData)
       setDashboard(dashData)
@@ -96,6 +99,7 @@ export default function TeacherDashboard({ page, setPage }) {
       setTrends(trendData)
       setAnalytics(analyticsData)
       setPreviousIntegrity(previousData?.overall_integrity_score ?? null)
+      setQuestionAnalytics(qAnalyticsData)
     } catch {
       setExams([])
       setDashboard(null)
@@ -107,6 +111,7 @@ export default function TeacherDashboard({ page, setPage }) {
       setTrends(null)
       setAnalytics(null)
       setPreviousIntegrity(null)
+      setQuestionAnalytics(null)
       setError('Failed to load dashboard data. Please try again.')
     } finally {
       setLoading(false)
@@ -263,6 +268,85 @@ export default function TeacherDashboard({ page, setPage }) {
               </button>
             ))}
           </div>
+        </section>
+
+        <section className="col-span-12 card p-md">
+          <div className="flex items-center justify-between mb-md">
+            <h2 className="text-xl font-bold text-primary">AI Question Bank</h2>
+            <button onClick={() => setPage('questionBank')} className="text-xs text-secondary font-bold hover:underline">Manage Questions</button>
+          </div>
+          {loading ? (
+            <div className="grid md:grid-cols-4 gap-gutter">
+              {[1,2,3,4].map(i => <div key={i} className="animate-pulse"><div className="h-4 bg-surface-container-high rounded w-16 mb-xs" /><div className="h-8 bg-surface-container-high rounded w-20" /></div>)}
+            </div>
+          ) : questionAnalytics ? (
+            <>
+              <div className="grid md:grid-cols-4 gap-gutter mb-md">
+                <StatCard label="Total Questions" value={String(questionAnalytics.total_questions)} icon="library_books" />
+                <StatCard label="AI Generated" value={String(questionAnalytics.total_ai_generated)} icon="auto_awesome" />
+                <StatCard label="AI Saved" value={String(questionAnalytics.ai_generated_saved)} icon="save" />
+                <StatCard label="Unused" value={String(questionAnalytics.unused)} icon="unpublished" hint="Not linked to any exam" />
+              </div>
+              {questionAnalytics.by_blooms_level && Object.keys(questionAnalytics.by_blooms_level).length > 0 && (
+                <div className="mb-md">
+                  <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-sm">Bloom's Taxonomy Distribution</p>
+                  <div className="flex gap-sm flex-wrap">
+                    {['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create'].map(level => {
+                      const count = questionAnalytics.by_blooms_level[level] || 0
+                      const total = Object.values(questionAnalytics.by_blooms_level).reduce((a, b) => a + b, 0) || 1
+                      const pct = Math.round((count / total) * 100)
+                      return count > 0 ? (
+                        <div key={level} className="flex items-center gap-sm px-sm py-xs bg-tertiary-container/20 rounded-lg border border-tertiary-container">
+                          <span className="text-xs font-bold text-tertiary capitalize">{level}</span>
+                          <span className="text-xs text-on-surface-variant">{count} ({pct}%)</span>
+                        </div>
+                      ) : null
+                    })}
+                  </div>
+                </div>
+              )}
+              {questionAnalytics.ai_generation_trend?.length > 0 && (
+                <div className="mb-md">
+                  <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-sm">AI Generation Trend (Weekly)</p>
+                  <div className="flex items-end gap-xs h-24">
+                    {questionAnalytics.ai_generation_trend.map(p => {
+                      const maxCount = Math.max(...questionAnalytics.ai_generation_trend.map(t => t.count), 1)
+                      return (
+                        <div key={p.week} className="flex-1 flex flex-col items-center gap-xs group relative">
+                          <div className="w-full bg-secondary/20 rounded-t-md" style={{ height: `${(p.count / maxCount) * 100}%` }}>
+                            <div className="w-full h-full bg-secondary rounded-t-md transition-all duration-500" style={{ height: `${(p.count / maxCount) * 100}%` }} />
+                          </div>
+                          <span className="text-[10px] text-on-surface-variant truncate w-full text-center">{p.week.split('-').slice(1).join('/')}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+              {questionAnalytics.recent_ai_activity?.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-sm">Recent AI Activity</p>
+                  <div className="divide-y divide-outline-variant max-h-32 overflow-y-auto">
+                    {questionAnalytics.recent_ai_activity.map(a => (
+                      <div key={a.id} className="py-sm flex items-center gap-sm">
+                        <Icon className="text-sm text-secondary">auto_awesome</Icon>
+                        <p className="text-sm text-primary truncate flex-1">{a.question_text}</p>
+                        {a.blooms_level && <span className="pill bg-tertiary-container text-tertiary text-xs capitalize">{a.blooms_level}</span>}
+                        <span className="text-xs text-on-surface-variant shrink-0">{new Date(a.created_at).toLocaleDateString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="grid md:grid-cols-4 gap-gutter mb-md">
+              <StatCard label="Total Questions" value="—" icon="library_books" />
+              <StatCard label="AI Generated" value="—" icon="auto_awesome" />
+              <StatCard label="AI Saved" value="—" icon="save" />
+              <StatCard label="Unused" value="—" icon="unpublished" />
+            </div>
+          )}
         </section>
 
         <section className="col-span-12 card p-md">

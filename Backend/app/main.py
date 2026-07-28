@@ -35,6 +35,7 @@ from app.routes import (
     proctor_router,
     questions_router,
     students_router,
+    syllabus_router,
     teacher_proctor_router,
     teacher_router,
     webauthn_router,
@@ -120,6 +121,7 @@ app.include_router(institutions_router, prefix="/api")
 app.include_router(departments_router, prefix="/api")
 app.include_router(notifications_router, prefix="/api")
 app.include_router(webauthn_router, prefix="/api")
+app.include_router(syllabus_router, prefix="/api")
 
 
 if settings.ENABLE_METRICS:
@@ -279,6 +281,16 @@ def _run_migrations():
                 conn.execute(text("ALTER TABLE questions ADD COLUMN is_deleted BOOLEAN DEFAULT 0"))
             if "deleted_at" not in q_columns:
                 conn.execute(text("ALTER TABLE questions ADD COLUMN deleted_at DATETIME"))
+            if "is_ai_generated" not in q_columns:
+                conn.execute(text("ALTER TABLE questions ADD COLUMN is_ai_generated BOOLEAN DEFAULT 0"))
+            if "blooms_level" not in q_columns:
+                conn.execute(text("ALTER TABLE questions ADD COLUMN blooms_level VARCHAR(20)"))
+            if "ai_model" not in q_columns:
+                conn.execute(text("ALTER TABLE questions ADD COLUMN ai_model VARCHAR(100)"))
+            if "ai_prompt_used" not in q_columns:
+                conn.execute(text("ALTER TABLE questions ADD COLUMN ai_prompt_used VARCHAR(50)"))
+            if "generation_source" not in q_columns:
+                conn.execute(text("ALTER TABLE questions ADD COLUMN generation_source VARCHAR(20)"))
     except Exception:
         pass
 
@@ -288,3 +300,26 @@ def _run_migrations():
             conn.execute(text("CREATE TABLE IF NOT EXISTS question_versions (id INTEGER PRIMARY KEY AUTOINCREMENT, question_id INTEGER NOT NULL, version_number INTEGER NOT NULL, snapshot TEXT NOT NULL, changed_by INTEGER NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (question_id) REFERENCES questions(id), FOREIGN KEY (changed_by) REFERENCES users(id))"))
     except Exception:
         pass
+
+    try:
+        inspector.clear_cache()
+        syllabus_columns = {c["name"] for c in inspector.get_columns("syllabus")}
+    except Exception:
+        syllabus_columns = set()
+    with engine.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS syllabus ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "teacher_id INTEGER NOT NULL, "
+            "subject VARCHAR(255) NOT NULL, "
+            "topic VARCHAR(255) NOT NULL, "
+            "chapter VARCHAR(255), "
+            "unit VARCHAR(255), "
+            "description TEXT, "
+            "learning_outcomes TEXT, "
+            "is_active BOOLEAN DEFAULT 1, "
+            "created_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+            "updated_at DATETIME, "
+            "FOREIGN KEY (teacher_id) REFERENCES users(id)"
+            ")"
+        ))

@@ -58,6 +58,10 @@ export default function CreateExam({ page, setPage }) {
   const [loadingSubjects, setLoadingSubjects] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [conflicts, setConflicts] = useState([])
+  const [bankSearch, setBankSearch] = useState('')
+  const [bankDifficultyFilter, setBankDifficultyFilter] = useState('')
+  const [bankTypeFilter, setBankTypeFilter] = useState('')
+  const [expandedBankTopics, setExpandedBankTopics] = useState({})
   const conflictTimer = useRef(null)
   const total = 4
   const timezones = [
@@ -71,7 +75,7 @@ export default function CreateExam({ page, setPage }) {
     setLoadingQuestions(true)
     try {
       const data = await questionService.list()
-      setQuestions(data)
+      setQuestions(data.items || [])
     } catch {
       setQuestions([])
     } finally {
@@ -446,39 +450,130 @@ export default function CreateExam({ page, setPage }) {
                     <p className="text-sm text-outline mb-md">Total Marks: {form.total_marks}</p>
                   </div>
                 </>
-              ) : (
+) : (
                 <div className="card p-lg">
                   <div className="flex items-center justify-between mb-md">
-                    <h3 className="text-xl font-bold text-primary">Select Questions</h3>
-                    <button type="button" onClick={() => setSelectingFromBank(false)} className="text-sm text-secondary font-bold">Back to choices</button>
+                    <div>
+                      <h3 className="text-xl font-bold text-primary">Select Questions</h3>
+                      <p className="text-xs text-on-surface-variant mt-xs">Browse your question bank by topic. Override marks per question after selection.</p>
+                    </div>
+                    <button type="button" onClick={() => setSelectingFromBank(false)} className="text-sm text-secondary font-bold hover:underline">Back to choices</button>
                   </div>
                   {loadingQuestions ? (
-                    <p className="text-on-surface-variant text-sm text-center py-xl">Loading questions...</p>
-                  ) : questions.length === 0 ? (
-                    <p className="text-on-surface-variant text-sm text-center py-xl">No questions in the bank yet. Add some first.</p>
-                  ) : (
-                    <div className="divide-y divide-outline-variant max-h-96 overflow-y-auto border border-outline-variant rounded-xl">
-                      {questions.map(q => {
-                        const selected = selectedIds.has(q.id)
-                        return (
-                          <div key={q.id} className={`flex items-center gap-md p-md ${selected ? 'bg-secondary-container/5' : ''}`}>
-                            <input type="checkbox" checked={selected} onChange={() => toggleQuestion(q.id, q.marks)} className="rounded text-secondary" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-bold text-primary truncate">{q.question_text}</p>
-                              <p className="text-xs text-on-surface-variant">{q.subject} • {q.topic} • <span className={`font-bold ${q.difficulty === 'hard' ? 'text-error' : q.difficulty === 'easy' ? 'text-on-tertiary-container' : 'text-secondary'}`}>{q.difficulty}</span></p>
-                            </div>
-                            {selected ? (
-                              <input type="number" min="1" className="w-16 h-8 px-2 bg-surface-container-low border border-outline-variant rounded text-xs text-center" value={questionMarks[q.id] || q.marks || 1} onChange={e => setQuestionMark(q.id, Math.max(1, parseInt(e.target.value) || 1))} />
-                            ) : (
-                              <span className="text-xs text-on-surface-variant">{q.marks} mark(s)</span>
-                            )}
-                          </div>
-                        )
-                      })}
+                    <div className="flex items-center justify-center gap-sm py-xl text-on-surface-variant">
+                      <span className="w-5 h-5 border-2 border-secondary border-t-transparent rounded-full animate-spin" />
+                      <span className="text-sm">Loading questions...</span>
                     </div>
+                  ) : questions.length === 0 ? (
+                    <div className="text-center py-xl">
+                      <Icon className="text-4xl text-on-surface-variant mb-md">quiz</Icon>
+                      <p className="text-sm font-bold text-primary mb-sm">No questions in the bank yet</p>
+                      <p className="text-xs text-on-surface-variant">Add questions to the bank first, then come back to select them.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-sm mb-md flex-wrap">
+                        <div className="relative flex-1 min-w-[200px]">
+                          <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-on-surface-variant">search</Icon>
+                          <input type="text" placeholder="Search questions..." value={bankSearch} onChange={e => setBankSearch(e.target.value)} className="input pl-xl h-9 text-sm" />
+                        </div>
+                        <select value={bankDifficultyFilter} onChange={e => setBankDifficultyFilter(e.target.value)} className="input h-9 text-sm w-auto">
+                          <option value="">All Difficulties</option>
+                          <option value="easy">Easy</option>
+                          <option value="medium">Medium</option>
+                          <option value="hard">Hard</option>
+                        </select>
+                        <select value={bankTypeFilter} onChange={e => setBankTypeFilter(e.target.value)} className="input h-9 text-sm w-auto">
+                          <option value="">All Types</option>
+                          <option value="mcq">MCQ</option>
+                          <option value="short_answer">Short Answer</option>
+                          <option value="long_answer">Long Answer</option>
+                        </select>
+                      </div>
+                      {(() => {
+                        const filtered = questions.filter(q => {
+                          if (bankSearch && !q.question_text.toLowerCase().includes(bankSearch.toLowerCase())) return false
+                          if (bankDifficultyFilter && q.difficulty !== bankDifficultyFilter) return false
+                          if (bankTypeFilter && q.question_type !== bankTypeFilter) return false
+                          return true
+                        })
+                        const grouped = filtered.reduce((acc, q) => {
+                          const topic = q.topic || 'Untitled'
+                          if (!acc[topic]) acc[topic] = []
+                          acc[topic].push(q)
+                          return acc
+                        }, {})
+                        const selectedCount = Array.from(selectedIds).reduce((sum, id) => sum + (questionMarks[id] || 1), 0)
+                        return (
+                          <>
+                            <div className="flex items-center justify-between mb-sm text-sm">
+                              <span className="text-on-surface-variant">{filtered.length} question{filtered.length !== 1 ? 's' : ''} available</span>
+                              {selectedIds.size > 0 && (
+                                <span className="font-bold text-primary">{selectedIds.size} selected ({selectedCount} total marks)</span>
+                              )}
+                            </div>
+                            <div className="space-y-md max-h-[420px] overflow-y-auto border border-outline-variant rounded-xl p-sm">
+                              {Object.entries(grouped).sort((a, b) => a[0].localeCompare(b[0])).map(([topic, topicQuestions]) => {
+                                const selectedInTopic = topicQuestions.filter(q => selectedIds.has(q.id))
+                                const isExpanded = expandedBankTopics[topic] !== false
+                                return (
+                                  <div key={topic} className="border border-outline-variant rounded-xl overflow-hidden">
+                                    <button type="button" onClick={() => setExpandedBankTopics(prev => ({ ...prev, [topic]: !isExpanded }))} className="w-full flex items-center justify-between px-md py-sm bg-surface-container-low hover:bg-surface-container-high transition-colors cursor-pointer">
+                                      <div className="flex items-center gap-sm">
+                                        <div className="w-2 h-6 rounded-full bg-secondary shrink-0" />
+                                        <span className="text-sm font-bold text-primary">{topic}</span>
+                                        <span className="text-xs text-on-surface-variant">({topicQuestions.length})</span>
+                                      </div>
+                                      <div className="flex items-center gap-sm">
+                                        {selectedInTopic.length > 0 && (
+                                          <span className="text-xs bg-secondary text-white px-sm py-0.5 rounded-full">{selectedInTopic.length} selected</span>
+                                        )}
+                                        <Icon className={`text-sm text-on-surface-variant transition-transform ${isExpanded ? 'rotate-180' : ''}`}>expand_more</Icon>
+                                      </div>
+                                    </button>
+                                    {isExpanded && (
+                                      <div className="divide-y divide-outline-variant">
+                                        {topicQuestions.map(q => {
+                                          const selected = selectedIds.has(q.id)
+                                          return (
+                                            <div key={q.id} className={`flex items-center gap-md px-md py-sm hover:bg-surface-container-low transition-colors ${selected ? 'bg-secondary-container/5' : ''}`}>
+                                              <input type="checkbox" checked={selected} onChange={() => toggleQuestion(q.id, q.marks)} className="rounded text-secondary shrink-0" id={`q-${q.id}`} />
+                                              <div className="flex-1 min-w-0" onClick={() => toggleQuestion(q.id, q.marks)}>
+                                                <div className="flex items-center gap-xs flex-wrap mb-xs">
+                                                  <span className={'text-[10px] font-bold px-1.5 py-0.5 rounded ' + (q.difficulty === 'hard' ? 'bg-error-container text-error' : q.difficulty === 'easy' ? 'bg-tertiary-container text-tertiary' : 'bg-secondary-container text-secondary')}>{q.difficulty}</span>
+                                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant">{q.question_type.replace('_', ' ')}</span>
+                                                  {q.blooms_level && <span className="text-[10px] px-1.5 py-0.5 rounded bg-tertiary-container/30 text-tertiary capitalize">{q.blooms_level}</span>}
+                                                  <span className="text-[10px] text-on-surface-variant">{q.marks} mark(s)</span>
+                                                </div>
+                                                <p className="text-sm font-bold text-primary leading-snug">{q.question_text}</p>
+                                                <p className="text-xs text-on-surface-variant mt-xs">Answer: {q.correct_answer}</p>
+                                              </div>
+                                              {selected ? (
+                                                <div className="shrink-0">
+                                                  <label className="text-[10px] text-on-surface-variant block mb-0.5 text-center">Marks</label>
+                                                  <input type="number" min="1" className="w-14 h-7 px-1 bg-surface-container-low border border-outline-variant rounded text-xs text-center" value={questionMarks[q.id] || q.marks || 1} onChange={e => setQuestionMark(q.id, Math.max(1, parseInt(e.target.value) || 1))} onClick={e => e.stopPropagation()} />
+                                                </div>
+                                              ) : (
+                                                <span className="text-xs text-on-surface-variant w-14 text-center shrink-0">{q.marks} mark(s)</span>
+                                              )}
+                                            </div>
+                                          )
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                            {filtered.length === 0 && (
+                              <div className="text-center py-lg text-on-surface-variant text-sm">No questions match your filters.</div>
+                            )}
+                          </>
+                        )
+                      })()}
+                    </>
                   )}
-                  <p className="text-sm text-on-surface-variant mt-md">{selectedIds.size} question(s) selected</p>
-                </div>
+</div>
               )}
             </div>
           )}

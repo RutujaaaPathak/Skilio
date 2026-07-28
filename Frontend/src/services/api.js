@@ -99,7 +99,9 @@ async function request(endpoint, options = {}) {
     throw err;
   }
 
-  return res.json();
+  const text = await res.text();
+  if (!text) return null;
+  return JSON.parse(text);
 }
 
 export { attemptRefresh };
