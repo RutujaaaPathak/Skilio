@@ -21,5 +21,11 @@ export const examService = {
   getMyResults: () => api.get('/students/my-results'),
   getPracticeRecommendations: () => api.get('/students/practice-recommendations'),
   getAiInsights: () => api.get('/students/ai-insights'),
+  getCoreAnalytics: () => api.get('/students/analytics/core'),
+  getWeeklyProgress: () => api.get('/students/analytics/weekly-progress'),
+  getLearningStreak: () => api.get('/students/analytics/learning-streak'),
+  getTopicMastery: () => api.get('/students/analytics/topic-mastery'),
+  getRanking: () => api.get('/students/analytics/ranking'),
+  getIntegrityBreakdown: () => api.get('/students/analytics/integrity'),
   removeAssignment: (assignmentId) => api.delete(`/exams/assignments/${assignmentId}`),
 };

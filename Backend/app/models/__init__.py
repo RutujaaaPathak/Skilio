@@ -11,6 +11,7 @@ from app.models.login_attempt import LoginAttempt
 from app.models.announcement import Announcement
 from app.models.audit_log import AuditLog
 from app.models.notification import Notification
+from app.models.achievement import UnlockedAchievement
 from app.models.totp_secret import TOTPSecret
 from app.models.emergency_contact import EmergencyContact
 from app.models.institution import Institution
@@ -37,6 +38,7 @@ __all__ = [
     "TOTPSecret",
     "Announcement",
     "Notification",
+    "UnlockedAchievement",
     "EmergencyContact",
     "Institution",
     "Department",

@@ -23,6 +23,7 @@ from app.core.security_headers import SecurityHeadersMiddleware
 from app.database import engine, Base
 from app.routes import (
     admin_router,
+    achievements_router,
     announcement_router,
     auth_router,
     departments_router,
@@ -40,6 +41,7 @@ from app.routes import (
     teacher_router,
     webauthn_router,
 )
+from app.models.achievement import UnlockedAchievement
 from app.models.notification import Notification
 from app.services.email_service import EmailService
 
@@ -120,6 +122,7 @@ app.include_router(emergency_contacts_router, prefix="/api")
 app.include_router(institutions_router, prefix="/api")
 app.include_router(departments_router, prefix="/api")
 app.include_router(notifications_router, prefix="/api")
+app.include_router(achievements_router, prefix="/api")
 app.include_router(webauthn_router, prefix="/api")
 app.include_router(syllabus_router, prefix="/api")
 

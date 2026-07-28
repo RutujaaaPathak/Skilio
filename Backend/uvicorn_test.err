@@ -1,0 +1,2 @@
+C:\Users\Shrey Ruparel\Desktop\Skilio\Skilio\Backend\venv\Lib\site-packages\pydantic\main.py:214: UserWarning: SECRET_KEY is not set or is the insecure default. Set a strong SECRET_KEY environment variable for production use.
+  validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)

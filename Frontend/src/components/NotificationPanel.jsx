@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Icon from './Icon.jsx';
 import { api } from '../services/api.js';
+import { achievementService } from '../services/achievementService.js';
 
 function timeAgo(dateStr) {
   const now = Date.now();
@@ -44,7 +45,22 @@ export default function NotificationPanel() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+    // Trigger analytics notifications check
+    achievementService.generateAnalyticsNotifications().catch(() => {});
   }, [open]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      achievementService.getUnreadCount()
+        .then((data) => {
+          if (data && data.unread_count !== undefined) {
+            setUnreadCount(data.unread_count);
+          }
+        })
+        .catch(() => {});
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     function handleClick(e) {

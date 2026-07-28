@@ -22,7 +22,15 @@ from app.schemas.exam import (
 from app.schemas.proctor import ProctorEventCreate, ProctorEventResponse, ProctorEventResponseWithRisk, ProctorRiskReportResponse
 from app.schemas.recommendation import PracticeRecommendationResponse, SubjectRecommendation
 from app.schemas.ai_insight import AIInsightItem, AIInsightsResponse
-
+from app.schemas.analytics import (
+    CoreAnalyticsResponse,
+    LearningStreakResponse,
+    TopicMasteryItem,
+    TopicMasteryResponse,
+    WeeklyProgressItem,
+    WeeklyProgressResponse,
+)
+ 
 __all__ = [
     "UserCreate", "UserLogin", "UserResponse", "TokenResponse",
     "QuestionCreate", "QuestionUpdate", "QuestionResponse", "AIGenerateRequest", "AIGenerateResponse", "AIGeneratedQuestion", "QuestionBulkCreate", "BulkUpdateRequest", "BulkDuplicateRequest", "PaginatedQuestionResponse", "QuestionAnalytics", "SuggestResponse", "VersionEntry",

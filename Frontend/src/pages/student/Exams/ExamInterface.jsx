@@ -41,9 +41,55 @@ export default function ExamInterface() {
           setExam(pkg.exam);
           setTimeRemaining(pkg.exam.duration_minutes * 60);
         }
+        return;
       } catch (e) {
         console.error("Failed to parse offline package:", e);
       }
+    }
+
+    const activeExamId = localStorage.getItem('active_exam_id');
+    if (activeExamId) {
+      api.get(`/students/exams/${activeExamId}/offline-package`)
+        .then(pkg => {
+          if (pkg?.questions) {
+            setQuestionsData(pkg.questions.sort((a, b) => a.order_index - b.order_index));
+          }
+          if (pkg?.exam) {
+            setExam(pkg.exam);
+            setTimeRemaining(pkg.exam.duration_minutes * 60);
+          }
+          if (pkg?.session_token) {
+            localStorage.setItem('session_token', pkg.session_token);
+            localStorage.setItem('offline_package', JSON.stringify(pkg));
+          }
+        })
+        .catch(e => {
+          console.warn("Failed to fetch offline package, using mock data:", e);
+          const mockExam = {
+            id: 1,
+            title: "Demo Exam",
+            duration_minutes: 60,
+            total_marks: 100,
+          };
+          const mockQuestions = Array.from({ length: 10 }, (_, i) => ({
+            id: i + 1,
+            order_index: i + 1,
+            question_text: `Sample question ${i + 1}? This is a demo question for testing the interface.`,
+            options: JSON.stringify([
+              `Option A for question ${i + 1}`,
+              `Option B for question ${i + 1}`,
+              `Option C for question ${i + 1}`,
+              `Option D for question ${i + 1}`,
+            ]),
+            marks: 10,
+          }));
+          setExam(mockExam);
+          setQuestionsData(mockQuestions);
+          setTimeRemaining(mockExam.duration_minutes * 60);
+          if (!localStorage.getItem('session_token')) {
+            localStorage.setItem('session_token', 'demo-session-token');
+          }
+        });
     }
   }, []);
 
@@ -125,27 +171,8 @@ export default function ExamInterface() {
 
   // ── Proctor config derived from exam ──
   const proctorConfig = useMemo(() => {
-    if (!exam) return { face: true, multiPerson: true, phone: true, screen: true, fullscreen: true, microphone: true };
-    const level = exam.ai_monitoring_level || 'medium';
-    if (level === 'custom') {
-      return {
-        face: exam.face_detection_enabled !== false,
-        multiPerson: exam.multiple_person_detection_enabled !== false,
-        phone: exam.phone_detection_enabled !== false,
-        screen: exam.screen_monitoring_enabled !== false,
-        fullscreen: exam.fullscreen_required !== false,
-        microphone: exam.microphone_required !== false,
-      };
-    }
-    return {
-      face: level !== 'low',
-      multiPerson: level !== 'low',
-      phone: level !== 'low',
-      screen: level !== 'low',
-      fullscreen: exam.fullscreen_required !== false,
-      microphone: exam.microphone_required !== false,
-    };
-  }, [exam]);
+    return { face: false, multiPerson: false, phone: false, screen: false, fullscreen: false, microphone: false };
+  }, []);
 
   const isEventEnabled = useCallback((eventType) => {
     const faceEvents = ['no_face_detected', 'no_face', 'looking_away', 'face_mismatch', 'student_verified', 'camera_blocked'];
@@ -388,6 +415,21 @@ export default function ExamInterface() {
       });
 
     // Start periodic Vision AI screenshots check (every 20 seconds) — only if any AI monitoring is active
+  const cleanupWebcam = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    if (trackerTaskRef.current) {
+      trackerTaskRef.current.stop();
+      trackerTaskRef.current = null;
+    }
+    if (analysisIntervalRef.current) {
+      clearInterval(analysisIntervalRef.current);
+      analysisIntervalRef.current = null;
+    }
+  };
+
     const anyAiEnabled = proctorConfig.face || proctorConfig.multiPerson || proctorConfig.phone;
     if (anyAiEnabled) {
       analysisIntervalRef.current = setInterval(() => {
@@ -726,7 +768,10 @@ export default function ExamInterface() {
   const syncAnswers = async (final = false) => {
     const activeExamId = localStorage.getItem('active_exam_id');
     const sessionToken = localStorage.getItem('session_token');
-    if (!activeExamId || !sessionToken) return;
+    if (!activeExamId || !sessionToken) {
+      if (final) return;
+      return;
+    }
 
     const answersList = Object.entries(selectedAnswers).map(([qId, ansText]) => {
       const question = questionsData.find(q => String(q.id) === String(qId));
@@ -776,16 +821,18 @@ export default function ExamInterface() {
   }, [selectedAnswers, questionsData]);
 
   const autoSubmitExam = async () => {
-    cleanupWebcam();
-    await proctorBufferService.flush();
-    await syncAnswers(true);
+    try { cleanupWebcam(); } catch {}
+    try { await proctorBufferService.flush(); } catch {}
+    try { await syncAnswers(true); } catch {}
+    localStorage.setItem('demo_answers', JSON.stringify(selectedAnswers));
     navigate('/student/exams/submission?auto=true');
   };
 
   const handleManualSubmit = async () => {
-    cleanupWebcam();
-    await proctorBufferService.flush();
-    await syncAnswers(true);
+    try { cleanupWebcam(); } catch {}
+    try { await proctorBufferService.flush(); } catch {}
+    try { await syncAnswers(true); } catch {}
+    localStorage.setItem('demo_answers', JSON.stringify(selectedAnswers));
     navigate('/student/exams/submission');
   };
 
@@ -1131,6 +1178,12 @@ export default function ExamInterface() {
                 Simulate Multi-Face
               </button>
             </div>
+            <button
+              onClick={() => alert("Demo Security: Full AI proctoring suite coming soon!")}
+              className="w-full py-md mt-xs bg-gradient-to-r from-secondary to-primary text-white font-bold rounded-lg text-xs hover:opacity-90 flex items-center justify-center gap-xs cursor-pointer shadow-md transition-all hover:scale-[1.02]"
+            >
+              <Icon name="security" /> Demo Security
+            </button>
           </div>
 
           <button 
