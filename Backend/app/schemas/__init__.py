@@ -1,5 +1,5 @@
 from app.schemas.auth import TokenResponse, UserCreate, UserLogin, UserResponse
-from app.schemas.question import QuestionCreate, QuestionResponse, QuestionUpdate
+from app.schemas.question import AIGenerateRequest, AIGenerateResponse, AIGeneratedQuestion, BulkDuplicateRequest, BulkUpdateRequest, PaginatedQuestionResponse, QuestionAnalytics, QuestionBulkCreate, QuestionCreate, QuestionResponse, QuestionUpdate, SuggestResponse, VersionEntry
 from app.schemas.device import DeviceBindRequest, DeviceCreate, DeviceResponse
 from app.schemas.exam import (
     AnswerSyncItem,
@@ -25,7 +25,7 @@ from app.schemas.ai_insight import AIInsightItem, AIInsightsResponse
 
 __all__ = [
     "UserCreate", "UserLogin", "UserResponse", "TokenResponse",
-    "QuestionCreate", "QuestionUpdate", "QuestionResponse",
+    "QuestionCreate", "QuestionUpdate", "QuestionResponse", "AIGenerateRequest", "AIGenerateResponse", "AIGeneratedQuestion", "QuestionBulkCreate", "BulkUpdateRequest", "BulkDuplicateRequest", "PaginatedQuestionResponse", "QuestionAnalytics", "SuggestResponse", "VersionEntry",
     "ExamCreate", "ExamUpdate", "ExamResponse",
     "ExamQuestionCreate", "ExamQuestionBulkCreate", "ExamQuestionResponse",
     "ExamAssignCreate", "ExamAssignmentResponse", "StudentExamResponse",

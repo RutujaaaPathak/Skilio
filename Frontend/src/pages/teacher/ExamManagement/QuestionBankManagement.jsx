@@ -45,6 +45,7 @@ export default function QuestionBankManagement({ page, setPage }) {
   const [bulkSubject, setBulkSubject] = useState('')
   const [bulkDifficulty, setBulkDifficulty] = useState('')
   const [bulkShow, setBulkShow] = useState(false)
+  const [expandedTopics, setExpandedTopics] = useState({})
 
   const fetchQuestions = useCallback(async () => {
     setLoading(true)
@@ -193,15 +194,8 @@ const fetchAnalytics = useCallback(async () => {
   }
 
   function handleSaved(result) {
-    if (editQuestion) {
-      setQuestions(prev => prev.map(q => q.id === result.id ? result : q))
-    } else if (Array.isArray(result)) {
-      setQuestions(prev => [...result, ...prev])
-      setTotal(prev => prev + result.length)
-    } else {
-      setQuestions(prev => [result, ...prev])
-      setTotal(prev => prev + 1)
-    }
+    fetchQuestions()
+    fetchAnalytics()
   }
 
   function handleCloseModal() {
@@ -373,59 +367,86 @@ const fetchAnalytics = useCallback(async () => {
           </aside>
 
           <div className="flex-1 min-w-0">
-            <div className="card overflow-x-auto">
-              <table className="w-full text-left table-fixed">
-                <thead>
-                  <tr className="bg-surface-container-low border-b border-outline-variant">
-                    <th className="table-th w-10"><input type="checkbox" aria-label="Select all questions" checked={selected.length === questions.length && questions.length > 0} onChange={toggleSelectAll} /></th>
-                    <th className="table-th">Question Preview</th>
-                    <th className="table-th w-[11%]">Type</th>
-                    <th className="table-th w-[11%]">Subject</th>
-                    <th className="table-th w-[11%]">Difficulty</th>
-                    <th className="table-th w-[15%]">Created</th>
-                    <th className="table-th w-[25%] last:text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-outline-variant">
-                  {loading ? (
-                    <tr><td colSpan={7} className="table-td text-center py-xl text-on-surface-variant">Loading questions...</td></tr>
-                  ) : questions.length === 0 ? (
-                    <tr><td colSpan={7} className="table-td text-center text-on-surface-variant py-xl">No questions for {activeSubject}. Add a new question to get started.</td></tr>
-                  ) : questions.map((q, i) => (
-                    <tr key={q.id} onClick={() => toggleSelect(q.id)} className="hover:bg-surface-container-low cursor-pointer group">
-                      <td className="table-td"><input checked={selected.includes(q.id)} readOnly type="checkbox" aria-label={"Select question " + q.id} /></td>
-                      <td className="table-td truncate">
-                        <div className="flex gap-sm">
-                          <div className={'w-2 h-10 rounded-full shrink-0 ' + (i % 2 ? 'bg-secondary-container' : 'bg-primary')} />
-                          <div className="min-w-0">
-                            <p className="text-sm font-bold text-primary truncate">{q.question_text}</p>
-                            <p className="text-xs text-on-surface-variant truncate">{q.topic}</p>
+            {loading ? (
+              <div className="text-center py-xl text-on-surface-variant">Loading questions...</div>
+            ) : questions.length === 0 ? (
+              <div className="card p-xl text-center">
+                <Icon className="text-4xl text-on-surface-variant mb-md">quiz</Icon>
+                <p className="text-lg font-bold text-primary mb-sm">No questions for {activeSubject}</p>
+                <p className="text-on-surface-variant mb-lg">Add a new question to get started.</p>
+                <button onClick={() => { setMode('manual'); setShowModal(true) }} className="btn-primary px-lg py-sm">
+                  <Icon className="text-sm inline align-middle mr-xs">add_circle</Icon>Add First Question
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-md">
+                {Object.entries(
+                  questions.reduce((acc, q) => {
+                    const topic = q.topic || 'Untitled'
+                    if (!acc[topic]) acc[topic] = []
+                    acc[topic].push(q)
+                    return acc
+                  }, {})
+                ).sort((a, b) => a[0].localeCompare(b[0])).map(([topic, topicQuestions]) => {
+                  const isExpanded = expandedTopics[topic] !== false
+                  return (
+                    <div key={topic} className="card overflow-hidden">
+                      <button
+                        onClick={() => setExpandedTopics(prev => ({ ...prev, [topic]: !isExpanded }))}
+                        className="w-full flex items-center justify-between p-md hover:bg-surface-container-low transition-colors cursor-pointer"
+                      >
+                        <div className="flex items-center gap-md">
+                          <div className={`w-2 h-8 rounded-full shrink-0 ${SUBJECT_COLORS[Object.keys(questions.reduce((a, q) => { if (!a[q.topic]) a[q.topic] = true; return a }, {})).indexOf(topic) % SUBJECT_COLORS.length] || 'bg-primary'}`} />
+                          <div className="text-left">
+                            <h3 className="text-lg font-bold text-primary">{topic}</h3>
+                            <p className="text-xs text-on-surface-variant">{topicQuestions.length} question{topicQuestions.length !== 1 ? 's' : ''}</p>
                           </div>
                         </div>
-                      </td>
-                      <td className="table-td whitespace-nowrap"><span className="pill bg-surface-container-highest text-on-surface-variant">{q.question_type.replace('_', ' ')}</span></td>
-                      <td className="table-td whitespace-nowrap text-sm">{q.subject}</td>
-                      <td className="table-td whitespace-nowrap"><span className={'text-xs font-bold ' + difficultyClass(q.difficulty)}>{q.difficulty}</span></td>
-                      <td className="table-td whitespace-nowrap text-xs text-on-surface-variant">{new Date(q.created_at).toLocaleDateString()}</td>
-                      <td className="table-td whitespace-nowrap"><div className="flex justify-end gap-xs">
-                        <button onClick={(e) => { e.stopPropagation(); setPreviewQuestion(q) }} aria-label="Preview question" className="p-2 hover:bg-surface-container-high rounded-full" title="Preview">
-                          <Icon className="text-sm">visibility</Icon>
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); handleEdit(q) }} aria-label="Edit question" className="p-2 hover:bg-surface-container-high rounded-full" title="Edit">
-                          <Icon className="text-sm">edit</Icon>
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); handleDuplicate(q.id) }} aria-label="Duplicate question" className="p-2 hover:bg-surface-container-high rounded-full" title="Duplicate">
-                          <Icon className="text-sm">content_copy</Icon>
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); if (confirm('Delete this question?')) handleDelete(q.id) }} className="p-2 hover:bg-surface-container-high rounded-full" title="Delete">
-                          <Icon className="text-sm">delete</Icon>
-                        </button>
-                      </div></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        <div className="flex items-center gap-sm">
+                          <span className={`text-xs font-bold px-sm py-0.5 rounded-full ${topicQuestions.every(q => selected.includes(q.id)) ? 'bg-secondary text-white' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                            {topicQuestions.filter(q => selected.includes(q.id)).length}/{topicQuestions.length} selected
+                          </span>
+                          <Icon className={`text-on-surface-variant transition-transform ${isExpanded ? 'rotate-180' : ''}`}>expand_more</Icon>
+                        </div>
+                      </button>
+                      {isExpanded && (
+                        <div className="divide-y divide-outline-variant border-t border-outline-variant">
+                          {topicQuestions.map((q, i) => (
+                            <div key={q.id} className={`flex items-center gap-md p-md hover:bg-surface-container-low cursor-pointer transition-colors ${selected.includes(q.id) ? 'bg-secondary-container/5' : ''}`} onClick={() => toggleSelect(q.id)}>
+                              <input checked={selected.includes(q.id)} readOnly type="checkbox" className="shrink-0" aria-label={"Select question " + q.id} />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-sm mb-xs">
+                                  <span className={'text-xs font-bold px-sm py-0.5 rounded-full ' + (q.difficulty === 'hard' ? 'bg-error-container text-error' : q.difficulty === 'easy' ? 'bg-tertiary-container text-tertiary' : 'bg-secondary-container text-secondary')}>{q.difficulty}</span>
+                                  <span className="text-xs px-sm py-0.5 rounded-full bg-surface-container-high text-on-surface-variant">{q.question_type.replace('_', ' ')}</span>
+                                  {q.blooms_level && <span className="text-xs px-sm py-0.5 rounded-full bg-tertiary-container/50 text-tertiary capitalize">{q.blooms_level}</span>}
+                                  <span className="text-xs text-on-surface-variant">{q.marks} mark(s)</span>
+                                </div>
+                                <p className="text-sm font-bold text-primary truncate">{q.question_text}</p>
+                                <p className="text-xs text-on-surface-variant truncate">Answer: {q.correct_answer}</p>
+                              </div>
+                              <div className="flex gap-xs shrink-0" onClick={e => e.stopPropagation()}>
+                                <button onClick={() => setPreviewQuestion(q)} aria-label="Preview" className="p-1.5 hover:bg-surface-container-high rounded-full" title="Preview">
+                                  <Icon className="text-sm">visibility</Icon>
+                                </button>
+                                <button onClick={() => handleEdit(q)} aria-label="Edit" className="p-1.5 hover:bg-surface-container-high rounded-full" title="Edit">
+                                  <Icon className="text-sm">edit</Icon>
+                                </button>
+                                <button onClick={() => handleDuplicate(q.id)} aria-label="Duplicate" className="p-1.5 hover:bg-surface-container-high rounded-full" title="Duplicate">
+                                  <Icon className="text-sm">content_copy</Icon>
+                                </button>
+                                <button onClick={() => { if (confirm('Delete this question?')) handleDelete(q.id) }} aria-label="Delete" className="p-1.5 hover:bg-surface-container-high rounded-full" title="Delete">
+                                  <Icon className="text-sm">delete</Icon>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
 
             {totalPages > 1 && (
               <div className="flex items-center justify-between mt-md">
@@ -476,7 +497,7 @@ const fetchAnalytics = useCallback(async () => {
       {showModal && mode === 'manual' && <QuestionFormModal onClose={handleCloseModal} onSaved={handleSaved} editQuestion={editQuestion} prefillSubject={view === 'subject' ? activeSubject : ''} />}
       {showModal && mode === 'csv' && <CSVImportModal onClose={handleCloseModal} onSaved={handleSaved} />}
       {showModal && mode === 'ai' && <AIGenerateModal onClose={handleCloseModal} onSaved={handleSaved} />}
-      {previewQuestion && <QuestionPreviewModal question={previewQuestion} onClose={() => setPreviewQuestion(null)} />}
+      {previewQuestion && <QuestionPreviewModal question={previewQuestion} onClose={() => setPreviewQuestion(null)} onSaved={handleSaved} />}
     </TeacherShell>
   )
 }

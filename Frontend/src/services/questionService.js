@@ -81,4 +81,7 @@ export const questionService = {
   bulkUpdate: (questionIds, data) => api.post('/questions/bulk-update', { question_ids: questionIds, ...data }),
   bulkDuplicate: (questionIds) => api.post('/questions/bulk-duplicate', { question_ids: questionIds }),
   getVersions: (id) => api.get('/questions/' + id + '/versions'),
+  generateEquivalent: (questionId, count = 1) => api.post('/questions/generate-equivalent', { question_id: questionId, count }),
+  generateEquivalentFromData: (data, count = 1) => api.post('/questions/generate-equivalent', { ...data, count }),
+  checkDuplicates: (questionTexts) => api.post('/questions/check-duplicates', { question_texts: questionTexts }),
 };
