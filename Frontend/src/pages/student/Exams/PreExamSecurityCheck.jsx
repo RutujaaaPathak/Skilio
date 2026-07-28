@@ -956,8 +956,7 @@ export default function PreExamSecurityCheck() {
                                   <div className="h-full bg-secondary transition-all" style={{ width: `${audioLevel}%` }} />
                                 </div>
                                 </div>
-                              </div>
-                            )}
+                              )}
                           </div>
                         )}
                       </div>

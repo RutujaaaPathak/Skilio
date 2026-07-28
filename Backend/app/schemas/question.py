@@ -98,15 +98,18 @@ class QuestionBulkCreate(BaseModel):
 class AIGenerateRequest(BaseModel):
     subject: str
     topic: str
-    difficulty: str = "medium"
+    difficulties: list[str] = ["medium"]
     question_types: list[str] = ["mcq"]
     count: int = 5
 
-    @field_validator("difficulty")
+    @field_validator("difficulties")
     @classmethod
-    def validate_difficulty(cls, v: str) -> str:
-        if v not in DIFFICULTIES:
-            raise ValueError(f"Difficulty must be one of {sorted(DIFFICULTIES)}")
+    def validate_difficulties(cls, v: list[str]) -> list[str]:
+        invalid = [d for d in v if d not in DIFFICULTIES]
+        if invalid:
+            raise ValueError(f"Invalid difficulties: {invalid}. Must be one of {sorted(DIFFICULTIES)}")
+        if not v:
+            raise ValueError("At least one difficulty is required")
         return v
 
     @field_validator("question_types")
@@ -158,3 +161,71 @@ class QuestionResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class PaginatedQuestionResponse(BaseModel):
+    items: list[QuestionResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+class BulkUpdateRequest(BaseModel):
+    question_ids: list[int]
+    subject: str | None = None
+    topic: str | None = None
+    difficulty: str | None = None
+    question_type: str | None = None
+    marks: int | None = None
+    explanation: str | None = None
+
+    @field_validator("difficulty")
+    @classmethod
+    def validate_difficulty(cls, v: str | None) -> str | None:
+        if v is not None and v not in DIFFICULTIES:
+            raise ValueError(f"Difficulty must be one of {sorted(DIFFICULTIES)}")
+        return v
+
+    @field_validator("question_type")
+    @classmethod
+    def validate_question_type(cls, v: str | None) -> str | None:
+        if v is not None and v not in QUESTION_TYPES:
+            raise ValueError(f"Question type must be one of {sorted(QUESTION_TYPES)}")
+        return v
+
+    @field_validator("marks")
+    @classmethod
+    def validate_marks(cls, v: int | None) -> int | None:
+        if v is not None and v < 1:
+            raise ValueError("Marks must be at least 1")
+        return v
+
+
+class BulkDuplicateRequest(BaseModel):
+    question_ids: list[int]
+
+
+class QuestionAnalytics(BaseModel):
+    total_questions: int
+    by_difficulty: dict[str, int]
+    by_type: dict[str, int]
+    by_subject: dict[str, int]
+    recently_added: int
+    unused: int
+    average_difficulty: str
+
+
+class VersionEntry(BaseModel):
+    id: int
+    question_id: int
+    version_number: int
+    snapshot: dict
+    changed_by: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class SuggestResponse(BaseModel):
+    suggestions: list[str]

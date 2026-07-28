@@ -7,51 +7,29 @@ function parseCSV(text) {
   let current = []
   let field = ''
   let inQuotes = false
-
   for (let i = 0; i < text.length; i++) {
-    const ch = text[i]
-    const next = text[i + 1]
-
+    const ch = text[i]; const next = text[i + 1]
     if (inQuotes) {
-      if (ch === '"' && next === '"') {
-        field += '"'
-        i++
-      } else if (ch === '"') {
-        inQuotes = false
-      } else {
-        field += ch
-      }
+      if (ch === '"' && next === '"') { field += '"'; i++ }
+      else if (ch === '"') { inQuotes = false }
+      else { field += ch }
     } else {
-      if (ch === '"') {
-        inQuotes = true
-      } else if (ch === ',') {
-        current.push(field.trim())
-        field = ''
-      } else if (ch === '\n' || (ch === '\r' && next === '\n')) {
+      if (ch === '"') { inQuotes = true }
+      else if (ch === ',') { current.push(field.trim()); field = '' }
+      else if (ch === '\n' || (ch === '\r' && next === '\n')) {
         if (ch === '\r') i++
         current.push(field.trim())
-        if (current.length > 0 && current.some(c => c)) {
-          lines.push(current)
-        }
-        current = []
-        field = ''
+        if (current.length > 0 && current.some(c => c)) lines.push(current)
+        current = []; field = ''
       } else if (ch === '\r') {
         current.push(field.trim())
-        if (current.length > 0 && current.some(c => c)) {
-          lines.push(current)
-        }
-        current = []
-        field = ''
-      } else {
-        field += ch
-      }
+        if (current.length > 0 && current.some(c => c)) lines.push(current)
+        current = []; field = ''
+      } else { field += ch }
     }
   }
   current.push(field.trim())
-  if (current.length > 0 && current.some(c => c)) {
-    lines.push(current)
-  }
-
+  if (current.length > 0 && current.some(c => c)) lines.push(current)
   return lines
 }
 
@@ -75,62 +53,80 @@ function matchHeader(h) {
   return null
 }
 
+function parseCSVData(text) {
+  const rows = parseCSV(text)
+  if (rows.length < 2) return { parsed: [], errors: ['CSV file must have a header row and at least one data row.'] }
+  const headers = rows[0].map(h => matchHeader(h))
+  const unknownIdx = headers.indexOf(undefined)
+  if (unknownIdx !== -1) {
+    return { parsed: [], errors: ['Unknown column: "' + rows[0][unknownIdx] + '". Valid headers: subject, topic, difficulty, question_type, question_text, options, correct_answer, marks, explanation.'] }
+  }
+  const parsed = rows.slice(1).map((row) => {
+    const q = {}
+    headers.forEach((field, ci) => {
+      let val = row[ci] || ''
+      if (field === 'options') q[field] = val ? val.split(';').map(s => s.trim()).filter(Boolean) : undefined
+      else if (field === 'marks') q[field] = parseInt(val) || 1
+      else q[field] = val || undefined
+    })
+    return q
+  }).filter(q => q.question_text)
+
+  const errors = []
+  parsed.forEach((q, i) => {
+    if (!q.subject) errors.push(`Row ${i+1}: subject is required`)
+    if (!q.topic) errors.push(`Row ${i+1}: topic is required`)
+    if (!q.question_text) errors.push(`Row ${i+1}: question_text is required`)
+    if (!q.correct_answer) errors.push(`Row ${i+1}: correct_answer is required`)
+    if (q.question_type === 'mcq' && (!q.options || q.options.length < 2)) {
+      errors.push(`Row ${i+1}: MCQ must have at least 2 options (semicolon-separated)`)
+    }
+  })
+  return { parsed, errors }
+}
+
 export default function CSVImportModal({ onClose, onSaved }) {
+  const [importMode, setImportMode] = useState('csv')
   const [step, setStep] = useState('upload')
   const [preview, setPreview] = useState([])
   const [errors, setErrors] = useState([])
   const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(false)
   const fileRef = useRef()
 
   function handleFile(e) {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      const text = ev.target.result
-      const rows = parseCSV(text)
-      if (rows.length < 2) {
-        setErrors(['CSV file must have a header row and at least one data row.'])
-        return
+    if (importMode === 'csv') {
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        const result = parseCSVData(ev.target.result)
+        setErrors(result.errors)
+        setPreview(result.parsed)
+        setStep('preview')
       }
-      const headers = rows[0].map(h => matchHeader(h))
-      const unknownIdx = headers.indexOf(undefined)
-      if (unknownIdx !== -1) {
-        setErrors([`Unknown column: "${rows[0][unknownIdx]}". Valid headers: subject, topic, difficulty, question_type, question_text, options, correct_answer, marks, explanation.`])
-        return
-      }
-
-      const parsed = rows.slice(1).map((row, ri) => {
-        const q = {}
-        headers.forEach((field, ci) => {
-          let val = row[ci] || ''
-          if (field === 'options') {
-            q[field] = val ? val.split(';').map(s => s.trim()).filter(Boolean) : undefined
-          } else if (field === 'marks') {
-            q[field] = parseInt(val) || 1
-          } else {
-            q[field] = val || undefined
-          }
+      reader.readAsText(file)
+    } else if (importMode === 'pdf') {
+      setLoading(true)
+      questionService.importPdfPreview(file)
+        .then(data => {
+          setErrors(data.errors || [])
+          setPreview(data.parsed || [])
+          setStep('preview')
         })
-        return q
-      }).filter(q => q.question_text)
-
-      const validationErrors = []
-      parsed.forEach((q, i) => {
-        if (!q.subject) validationErrors.push(`Row ${i + 2}: subject is required`)
-        if (!q.topic) validationErrors.push(`Row ${i + 2}: topic is required`)
-        if (!q.question_text) validationErrors.push(`Row ${i + 2}: question_text is required`)
-        if (!q.correct_answer) validationErrors.push(`Row ${i + 2}: correct_answer is required`)
-        if (q.question_type === 'mcq' && (!q.options || q.options.length < 2)) {
-          validationErrors.push(`Row ${i + 2}: MCQ must have at least 2 options (semicolon-separated)`)
-        }
-      })
-
-      setErrors(validationErrors)
-      setPreview(parsed)
-      setStep('preview')
+        .catch(err => setErrors([err.message]))
+        .finally(() => setLoading(false))
+    } else {
+      setLoading(true)
+      questionService.importExcelPreview(file)
+        .then(data => {
+          setErrors(data.errors || [])
+          setPreview(data.parsed || [])
+          setStep('preview')
+        })
+        .catch(err => setErrors([err.message]))
+        .finally(() => setLoading(false))
     }
-    reader.readAsText(file)
   }
 
   async function handleImport() {
@@ -146,29 +142,75 @@ export default function CSVImportModal({ onClose, onSaved }) {
     }
   }
 
+  function handleRetry() {
+    setStep('upload')
+    setPreview([])
+    setErrors([])
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto m-4" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-lg border-b border-outline-variant">
-          <h2 className="text-xl font-bold text-primary">Bulk CSV Import</h2>
+          <h2 className="text-xl font-bold text-primary">Bulk Import</h2>
           <button onClick={onClose} className="p-2 hover:bg-surface-container-low rounded-full"><Icon>close</Icon></button>
         </div>
 
         {step === 'upload' && (
           <div className="p-lg">
+            <div className="flex gap-sm mb-lg">
+              {['csv', 'excel', 'pdf'].map(mode => (
+                <button key={mode} onClick={() => setImportMode(mode)}
+                  className={"px-lg py-sm rounded-lg text-sm font-bold transition-colors " + (importMode === mode ? 'bg-secondary text-on-secondary' : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high')}>
+                  <Icon className="text-sm align-middle mr-xs">{mode === 'csv' ? 'description' : mode === 'excel' ? 'table_chart' : 'picture_as_pdf'}</Icon>
+                  {mode === 'csv' ? 'CSV' : mode === 'excel' ? 'Excel (.xlsx)' : 'PDF'}
+                </button>
+              ))}
+            </div>
+
             <div className="border-2 border-dashed border-outline-variant rounded-xl p-xl text-center hover:border-secondary cursor-pointer" onClick={() => fileRef.current?.click()}>
               <Icon className="text-4xl text-on-surface-variant mb-md">upload_file</Icon>
-              <p className="font-bold text-primary">Click to select a CSV file</p>
+              <p className="font-bold text-primary">Click to select a {importMode === 'csv' ? 'CSV' : importMode === 'excel' ? 'Excel' : 'PDF'} file</p>
               <p className="text-sm text-on-surface-variant mt-xs">or drag and drop</p>
+              {loading && <p className="text-sm text-secondary mt-sm">Parsing file...</p>}
             </div>
-            <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleFile} />
+            <input ref={fileRef} type="file" accept={importMode === 'csv' ? '.csv' : importMode === 'excel' ? '.xlsx,.xls' : '.pdf'} className="hidden" onChange={handleFile} disabled={loading} />
 
             <div className="mt-lg bg-surface-container-low rounded-xl p-md">
-              <h3 className="font-bold text-primary mb-sm">CSV Format</h3>
-              <p className="text-xs text-on-surface-variant mb-sm">Required columns: <b>subject</b>, <b>topic</b>, <b>question_text</b>, <b>correct_answer</b></p>
-              <p className="text-xs text-on-surface-variant mb-sm">Optional columns: <b>difficulty</b> (easy/medium/hard), <b>question_type</b> (mcq/short_answer/long_answer), <b>options</b> (semicolon-separated for MCQ), <b>marks</b>, <b>explanation</b></p>
-              <pre className="text-xs bg-surface-container-high p-sm rounded-lg mt-sm overflow-x-auto whitespace-pre">{`subject,topic,question_text,question_type,options,correct_answer,difficulty,marks
+              <h3 className="font-bold text-primary mb-sm">{importMode === 'csv' ? 'CSV Format' : importMode === 'excel' ? 'Excel Format' : 'PDF Format'}</h3>
+              {importMode === 'pdf' ? (
+                <>
+                  <p className="text-xs text-on-surface-variant mb-sm">Format each question with labelled fields. Questions can be separated by blank lines or numbering.</p>
+                  <p className="text-xs text-on-surface-variant mb-sm">Supported labels: <b>Subject:</b>, <b>Topic:</b>, <b>Difficulty:</b>, <b>Type:</b>, <b>Answer:</b>, <b>Options:</b>, <b>Marks:</b>, <b>Explanation:</b></p>
+                  <pre className="text-xs bg-surface-container-high p-sm rounded-lg mt-sm overflow-x-auto whitespace-pre">{`1. What is entropy?
+Subject: Physics
+Topic: Thermodynamics
+Difficulty: medium
+Type: mcq
+Options: Disorder; Energy; Temperature; Pressure
+Answer: Disorder
+Explanation: Entropy measures disorder
+
+2. Explain Newton's First Law
+Subject: Physics
+Topic: Mechanics
+Difficulty: hard
+Type: short_answer
+Answer: An object at rest stays at rest`}</pre>
+                </>
+              ) : importMode === 'csv' ? (
+                <>
+                  <p className="text-xs text-on-surface-variant mb-sm">Required columns: <b>subject</b>, <b>topic</b>, <b>question_text</b>, <b>correct_answer</b></p>
+                  <p className="text-xs text-on-surface-variant mb-sm">Optional columns: <b>difficulty</b> (easy/medium/hard), <b>question_type</b> (mcq/short_answer/long_answer), <b>options</b> (semicolon-separated for MCQ), <b>marks</b>, <b>explanation</b></p>
+                  <pre className="text-xs bg-surface-container-high p-sm rounded-lg mt-sm overflow-x-auto whitespace-pre">{`subject,topic,question_text,question_type,options,correct_answer,difficulty,marks
 Physics,Thermodynamics,What is entropy?,mcq,Disorder;Energy;Temperature;Pressure,Disorder,medium,2`}</pre>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs text-on-surface-variant mb-sm">Required columns: <b>subject</b>, <b>topic</b>, <b>question_text</b>, <b>correct_answer</b></p>
+                  <p className="text-xs text-on-surface-variant mb-sm">Optional columns: <b>difficulty</b> (easy/medium/hard), <b>question_type</b> (mcq/short_answer/long_answer), <b>options</b> (semicolon-separated for MCQ), <b>marks</b>, <b>explanation</b></p>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -181,7 +223,7 @@ Physics,Thermodynamics,What is entropy?,mcq,Disorder;Energy;Temperature;Pressure
               </div>
             )}
 
-            <p className="text-sm text-on-surface-variant mb-md">{preview.length} question(s) parsed from CSV.</p>
+            <p className="text-sm text-on-surface-variant mb-md">{preview.length} question(s) parsed from file.</p>
 
             <div className="overflow-x-auto border border-outline-variant rounded-xl max-h-80 overflow-y-auto">
               <table className="w-full text-left text-sm">
@@ -211,7 +253,7 @@ Physics,Thermodynamics,What is entropy?,mcq,Disorder;Energy;Temperature;Pressure
             </div>
 
             <div className="flex justify-end gap-sm mt-lg pt-md border-t border-outline-variant">
-              <button onClick={() => setStep('upload')} className="btn-secondary px-lg py-sm">Back</button>
+              <button onClick={handleRetry} className="btn-secondary px-lg py-sm">Back</button>
               <button onClick={handleImport} disabled={saving || errors.length > 0} className="btn-primary px-lg py-sm">
                 {saving ? 'Importing...' : `Import ${preview.length} Question(s)`}
               </button>
