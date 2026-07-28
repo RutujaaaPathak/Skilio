@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 # pyrefly: ignore [missing-import]
 from fastapi import HTTPException, status
 # pyrefly: ignore [missing-import]
+from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
 
 from app.models.audit_log import AuditLog
@@ -409,6 +410,469 @@ class ExamService:
                 "integrity_percentage": submission.get("integrity_percentage"),
             })
         return results
+
+    @staticmethod
+    def get_core_analytics(db: Session, user: User) -> dict:
+        ExamService._transition_statuses(db)
+        assignments = (
+            db.query(ExamAssignment)
+            .filter(
+                ExamAssignment.student_id == user.id,
+                ExamAssignment.status == "submitted",
+            )
+            .all()
+        )
+        if not assignments:
+            return {
+                "overall_average_score": None,
+                "highest_score": None,
+                "lowest_score": None,
+                "pass_percentage": None,
+                "total_exams_completed": 0,
+                "total_exams_attempted": 0,
+                "total_time_spent_seconds": 0,
+                "average_time_per_exam_seconds": 0,
+            }
+
+        scores = []
+        passed = 0
+        total_exams = len(assignments)
+        total_time = 0
+
+        for a in assignments:
+            try:
+                submission = ExamService.get_my_submission(db, a.exam_id, user)
+            except HTTPException:
+                continue
+            sp = submission.get("score_percentage")
+            if sp is None:
+                continue
+            scores.append(sp)
+
+            exam = a.exam
+            pass_mark = (exam.passing_marks if exam.passing_marks else max(1, int(exam.total_marks * 0.4)))
+            earned = (sp / 100.0) * exam.total_marks
+            if earned >= pass_mark:
+                passed += 1
+
+        if not scores:
+            return {
+                "overall_average_score": None,
+                "highest_score": None,
+                "lowest_score": None,
+                "pass_percentage": None,
+                "total_exams_completed": total_exams,
+                "total_exams_attempted": len(scores),
+                "total_time_spent_seconds": 0,
+                "average_time_per_exam_seconds": 0,
+            }
+
+        sessions_with_time = (
+            db.query(ExamSession)
+            .filter(
+                ExamSession.student_id == user.id,
+                ExamSession.status == "submitted",
+            )
+            .all()
+        )
+        session_ids = [s.id for s in sessions_with_time]
+        if session_ids:
+            time_result = db.query(
+                sa_func.coalesce(sa_func.sum(StudentAnswer.time_spent_seconds), 0)
+            ).filter(
+                StudentAnswer.exam_session_id.in_(session_ids),
+            ).scalar()
+            total_time += time_result
+
+        avg_score = round(sum(scores) / len(scores), 2)
+        high = round(max(scores), 2)
+        low = round(min(scores), 2)
+        pass_pct = round((passed / len(scores)) * 100, 2)
+        avg_time = round(total_time / len(scores)) if scores else 0
+
+        return {
+            "overall_average_score": avg_score,
+            "highest_score": high,
+            "lowest_score": low,
+            "pass_percentage": pass_pct,
+            "total_exams_completed": total_exams,
+            "total_exams_attempted": len(scores),
+            "total_time_spent_seconds": total_time,
+            "average_time_per_exam_seconds": avg_time,
+        }
+
+    @staticmethod
+    def get_weekly_progress(db: Session, user: User) -> dict:
+        ExamService._transition_statuses(db)
+        import calendar
+        assignments = (
+            db.query(ExamAssignment)
+            .filter(
+                ExamAssignment.student_id == user.id,
+                ExamAssignment.status == "submitted",
+                ExamAssignment.submitted_at.isnot(None),
+            )
+            .order_by(ExamAssignment.submitted_at.asc())
+            .all()
+        )
+        if not assignments:
+            return {"weekly_progress": [], "has_data": False}
+
+        week_map = {}
+        for a in assignments:
+            try:
+                submission = ExamService.get_my_submission(db, a.exam_id, user)
+            except HTTPException:
+                continue
+            sp = submission.get("score_percentage")
+            if sp is None:
+                continue
+            submitted = a.submitted_at
+            if submitted.tzinfo:
+                submitted = submitted.astimezone(timezone.utc).replace(tzinfo=None)
+            iso_year, iso_week, iso_day = submitted.isocalendar()
+            week_start = datetime.fromisocalendar(iso_year, iso_week, 1)
+            week_end = datetime.fromisocalendar(iso_year, iso_week, 7)
+            key = f"{iso_year}-W{iso_week:02d}"
+            if key not in week_map:
+                week_map[key] = {"scores": [], "week_start": week_start, "week_end": week_end}
+            week_map[key]["scores"].append(sp)
+
+        weekly_progress = []
+        for key in sorted(week_map.keys()):
+            entry = week_map[key]
+            scores = entry["scores"]
+            weekly_progress.append({
+                "week_start": entry["week_start"].strftime("%Y-%m-%d"),
+                "week_end": entry["week_end"].strftime("%Y-%m-%d"),
+                "average_score": round(sum(scores) / len(scores), 2) if scores else None,
+                "exams_count": len(scores),
+            })
+
+        return {"weekly_progress": weekly_progress, "has_data": True}
+
+    @staticmethod
+    def get_learning_streak(db: Session, user: User) -> dict:
+        ExamService._transition_statuses(db)
+        assignment_dates = (
+            db.query(ExamAssignment.submitted_at)
+            .filter(
+                ExamAssignment.student_id == user.id,
+                ExamAssignment.status == "submitted",
+                ExamAssignment.submitted_at.isnot(None),
+            )
+            .all()
+        )
+        if not assignment_dates:
+            return {"current_streak": 0, "longest_streak": 0, "has_data": False}
+
+        unique_days = set()
+        for (d,) in assignment_dates:
+            if d.tzinfo:
+                d = d.astimezone(timezone.utc).replace(tzinfo=None)
+            unique_days.add(d.date())
+
+        sorted_days = sorted(unique_days)
+        if not sorted_days:
+            return {"current_streak": 0, "longest_streak": 0, "has_data": False}
+
+        from datetime import timedelta as td
+        longest = 1
+        current_run = 1
+        for i in range(1, len(sorted_days)):
+            if (sorted_days[i] - sorted_days[i - 1]).days == 1:
+                current_run += 1
+                longest = max(longest, current_run)
+            else:
+                current_run = 1
+
+        today = datetime.now(timezone.utc).date()
+        yesterday = today - td(days=1)
+        if sorted_days[-1] in (today, yesterday):
+            current_streak = 1
+            for i in range(len(sorted_days) - 2, -1, -1):
+                if (sorted_days[i + 1] - sorted_days[i]).days == 1:
+                    current_streak += 1
+                else:
+                    break
+        else:
+            current_streak = 0
+
+        return {"current_streak": current_streak, "longest_streak": longest, "has_data": True}
+
+    @staticmethod
+    def get_topic_mastery(db: Session, user: User) -> dict:
+        ExamService._transition_statuses(db)
+        assignments = (
+            db.query(ExamAssignment)
+            .filter(
+                ExamAssignment.student_id == user.id,
+                ExamAssignment.status == "submitted",
+            )
+            .all()
+        )
+        if not assignments:
+            return {"topics": [], "has_data": False}
+
+        from app.models.question import Question
+
+        topic_stats = {}
+        for a in assignments:
+            session = db.query(ExamSession).filter(
+                ExamSession.exam_id == a.exam_id,
+                ExamSession.student_id == user.id,
+                ExamSession.assignment_id == a.id,
+            ).order_by(ExamSession.downloaded_at.desc()).first()
+            if not session:
+                continue
+
+            answers = db.query(StudentAnswer).filter(
+                StudentAnswer.exam_session_id == session.id,
+            ).all()
+
+            exam_questions = db.query(ExamQuestion).filter(
+                ExamQuestion.exam_id == a.exam_id,
+            ).all()
+            eq_map = {eq.question_id: eq for eq in exam_questions}
+
+            for ans in answers:
+                eq = eq_map.get(ans.question_id)
+                if not eq or not eq.question:
+                    continue
+                question = eq.question
+                topic = question.topic
+                subject = question.subject
+
+                if topic not in topic_stats:
+                    topic_stats[topic] = {
+                        "topic": topic,
+                        "subject": subject,
+                        "total_questions": 0,
+                        "correct_count": 0,
+                    }
+
+                topic_stats[topic]["total_questions"] += 1
+                is_correct = False
+                if question.question_type == "mcq":
+                    if ans.answer_text and ans.answer_text.strip().lower() == question.correct_answer.strip().lower():
+                        is_correct = True
+                else:
+                    if ans.answer_text and _words_match(ans.answer_text, question.correct_answer):
+                        is_correct = True
+                if is_correct:
+                    topic_stats[topic]["correct_count"] += 1
+
+        topics = []
+        for t in sorted(topic_stats.keys()):
+            s = topic_stats[t]
+            avg = round((s["correct_count"] / s["total_questions"]) * 100, 2) if s["total_questions"] > 0 else None
+            status = "unknown"
+            if avg is not None:
+                if avg >= 75:
+                    status = "strong"
+                elif avg >= 40:
+                    status = "average"
+                else:
+                    status = "weak"
+            topics.append({
+                "topic": s["topic"],
+                "subject": s["subject"],
+                "average_score": avg,
+                "total_questions": s["total_questions"],
+                "correct_count": s["correct_count"],
+                "status": status,
+            })
+
+        return {"topics": topics, "has_data": len(topics) > 0}
+
+    # ── Ranking ──
+    @staticmethod
+    def _student_avg_score(db: Session, student: User) -> float | None:
+        assignments = (
+            db.query(ExamAssignment)
+            .filter(
+                ExamAssignment.student_id == student.id,
+                ExamAssignment.status == "submitted",
+            )
+            .all()
+        )
+        if not assignments:
+            return None
+
+        scores = []
+        for a in assignments:
+            session = (
+                db.query(ExamSession)
+                .filter(
+                    ExamSession.exam_id == a.exam_id,
+                    ExamSession.student_id == student.id,
+                    ExamSession.assignment_id == a.id,
+                )
+                .order_by(ExamSession.downloaded_at.desc())
+                .first()
+            )
+            if not session:
+                continue
+
+            exam_questions = (
+                db.query(ExamQuestion).filter(ExamQuestion.exam_id == a.exam_id).all()
+            )
+            eq_map = {eq.question_id: eq for eq in exam_questions}
+            answers = (
+                db.query(StudentAnswer)
+                .filter(StudentAnswer.exam_session_id == session.id)
+                .all()
+            )
+            if not answers or not exam_questions:
+                continue
+
+            total_marks = sum(eq.marks for eq in exam_questions)
+            earned = 0
+            total_q = len(exam_questions)
+            correct_q = 0
+
+            for ans in answers:
+                eq = eq_map.get(ans.question_id)
+                if not eq or not eq.question:
+                    continue
+                q = eq.question
+                is_correct = False
+                if q.question_type == "mcq":
+                    if ans.answer_text and ans.answer_text.strip().lower() == q.correct_answer.strip().lower():
+                        is_correct = True
+                else:
+                    if ans.answer_text and _words_match(ans.answer_text, q.correct_answer):
+                        is_correct = True
+                if is_correct:
+                    correct_q += 1
+                    earned += eq.marks
+
+            if total_marks > 0:
+                scores.append(round((earned / total_marks * 100), 2))
+            elif total_q > 0:
+                scores.append(round((correct_q / total_q * 100), 2))
+
+        return round(sum(scores) / len(scores), 2) if scores else None
+
+    @staticmethod
+    def get_ranking(db: Session, user: User) -> dict:
+        ExamService._transition_statuses(db)
+
+        my_score = ExamService._student_avg_score(db, user)
+        if my_score is None:
+            return {
+                "institution_rank": None,
+                "department_rank": None,
+                "batch_rank": None,
+                "overall_rank": None,
+                "has_data": False,
+            }
+
+        all_students = db.query(User).filter(User.role == "student").all()
+        student_scores: dict[int, float] = {}
+        for s in all_students:
+            sc = ExamService._student_avg_score(db, s)
+            if sc is not None:
+                student_scores[s.id] = sc
+
+        def _compute_rank(
+            candidate_ids: set[int], label: str
+        ) -> dict | None:
+            filtered = {
+                sid: sc for sid, sc in student_scores.items() if sid in candidate_ids
+            }
+            if not filtered or user.id not in filtered:
+                return None
+            sorted_ids = sorted(filtered, key=lambda sid: (-filtered[sid], sid))
+            rank = sorted_ids.index(user.id) + 1
+            return {
+                "rank": rank,
+                "total_students": len(sorted_ids),
+                "average_score": my_score,
+                "label": label,
+            }
+
+        same_institution = {s.id for s in all_students if s.institution_id == user.institution_id}
+        same_department = {s.id for s in all_students if s.department_id == user.department_id}
+        same_batch = {s.id for s in all_students if s.batch and s.batch == user.batch}
+
+        inst_label = (
+            user.institution.name if user.institution and hasattr(user.institution, "name") and user.institution.name
+            else f"Institution #{user.institution_id}" if user.institution_id
+            else "Institution"
+        )
+
+        return {
+            "institution_rank": _compute_rank(same_institution, inst_label) if user.institution_id else None,
+            "department_rank": _compute_rank(same_department, user.department.name if user.department else "Department") if user.department_id else None,
+            "batch_rank": _compute_rank(same_batch, f"Batch {user.batch}") if user.batch else None,
+            "overall_rank": _compute_rank(
+                {s.id for s in all_students if s.id in student_scores}, "Overall"
+            ),
+            "has_data": True,
+        }
+
+    # ── Integrity Breakdown ──
+    @staticmethod
+    def get_integrity_breakdown(db: Session, user: User) -> dict:
+        from app.models.proctor_event import ProctorEvent
+        from app.models.risk_report import ProctorRiskReport
+
+        ExamService._transition_statuses(db)
+
+        reports = (
+            db.query(ProctorRiskReport)
+            .filter(ProctorRiskReport.student_id == user.id)
+            .all()
+        )
+        if not reports:
+            return {
+                "overall_integrity": None,
+                "integrity_by_exam": [],
+                "event_breakdown": [],
+                "has_data": False,
+            }
+
+        integrity_by_exam = []
+        total_integrity_sum = 0.0
+        total_weight = 0
+
+        for r in reports:
+            exam = db.query(Exam).filter(Exam.id == r.exam_id).first()
+            integrity_pct = max(0.0, 100.0 - r.risk_score * 20.0)
+            integrity_pct = round(min(integrity_pct, 100.0), 2)
+            total_integrity_sum += integrity_pct
+            total_weight += 1
+            integrity_by_exam.append({
+                "exam_id": r.exam_id,
+                "exam_title": exam.title if exam else f"Exam #{r.exam_id}",
+                "integrity_percentage": integrity_pct,
+                "total_events": r.total_events,
+            })
+
+        overall_integrity = round(total_integrity_sum / total_weight, 2) if total_weight > 0 else None
+
+        events = (
+            db.query(
+                ProctorEvent.event_type,
+                ProctorEvent.severity,
+                sa_func.count(ProctorEvent.id).label("cnt"),
+            )
+            .filter(ProctorEvent.student_id == user.id)
+            .group_by(ProctorEvent.event_type, ProctorEvent.severity)
+            .all()
+        )
+        event_breakdown = [
+            {"event_type": e.event_type, "count": e.cnt, "severity": e.severity}
+            for e in events
+        ]
+
+        return {
+            "overall_integrity": overall_integrity,
+            "integrity_by_exam": integrity_by_exam,
+            "event_breakdown": event_breakdown,
+            "has_data": True,
+        }
 
     # ── Offline Package ──
     @staticmethod

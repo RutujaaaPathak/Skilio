@@ -40,14 +40,14 @@ export default function ExamInstructions() {
     if (elem.requestFullscreen) {
       elem.requestFullscreen()
         .then(() => {
-          navigate('/student/exams/security-check');
+          navigate('/student/exams/interface');
         })
         .catch((err) => {
           console.error("Fullscreen request failed, navigating anyway:", err);
-          navigate('/student/exams/security-check');
+          navigate('/student/exams/interface');
         });
     } else {
-      navigate('/student/exams/security-check');
+      navigate('/student/exams/interface');
     }
   };
 

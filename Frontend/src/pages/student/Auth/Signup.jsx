@@ -170,7 +170,7 @@ export default function Signup({ defaultRole = 'student' }) {
                       >
                         <option value="">Select Institution</option>
                         {institutions.map(inst => (
-                          <option key={inst.id} value={inst.id}>{inst.name}</option>
+                          <option key={inst.id} value={inst.id}>{inst.name} ({inst.code})</option>
                         ))}
                       </select>
                     </div>

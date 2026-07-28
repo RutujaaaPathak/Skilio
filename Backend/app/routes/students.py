@@ -10,6 +10,14 @@ from app.database import get_db
 from app.models.user import User
 from app.schemas.auth import UserResponse
 from app.schemas.device import DeviceBindRequest
+from app.schemas.analytics import (
+    CoreAnalyticsResponse,
+    IntegrityBreakdownResponse,
+    LearningStreakResponse,
+    RankingResponse,
+    TopicMasteryResponse,
+    WeeklyProgressResponse,
+)
 from app.schemas.exam import AnswerSyncRequest, AnswerSyncResponse, MySubmissionResponse, OfflinePackageResponse, StudentExamResponse, VoiceVerifyRequest, VoiceVerifyResponse
 from app.schemas.recommendation import PracticeRecommendationResponse
 from app.schemas.ai_insight import AIInsightsResponse
@@ -111,6 +119,54 @@ def get_my_results(
     current_user: User = Depends(get_current_user),
 ):
     return ExamService.get_my_results(db, current_user)
+
+
+@router.get("/analytics/core", response_model=CoreAnalyticsResponse)
+def get_core_analytics(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return ExamService.get_core_analytics(db, current_user)
+
+
+@router.get("/analytics/weekly-progress", response_model=WeeklyProgressResponse)
+def get_weekly_progress(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return ExamService.get_weekly_progress(db, current_user)
+
+
+@router.get("/analytics/learning-streak", response_model=LearningStreakResponse)
+def get_learning_streak(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return ExamService.get_learning_streak(db, current_user)
+
+
+@router.get("/analytics/topic-mastery", response_model=TopicMasteryResponse)
+def get_topic_mastery(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return ExamService.get_topic_mastery(db, current_user)
+
+
+@router.get("/analytics/ranking", response_model=RankingResponse)
+def get_ranking(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return ExamService.get_ranking(db, current_user)
+
+
+@router.get("/analytics/integrity", response_model=IntegrityBreakdownResponse)
+def get_integrity_breakdown(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return ExamService.get_integrity_breakdown(db, current_user)
 
 
 @router.get("/practice-recommendations", response_model=PracticeRecommendationResponse)

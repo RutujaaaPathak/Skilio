@@ -4,6 +4,7 @@ import StudentLayout from '../../../components/StudentLayout.jsx';
 import PageFooter from '../../../components/PageFooter.jsx';
 import Icon from '../../../components/Icon.jsx';
 import { examService } from '../../../services/examService.js';
+import { achievementService } from '../../../services/achievementService.js';
 import { authService } from '../../../services/authService.js';
 import { useAuth } from '../../../context/AuthContext.jsx';
 
@@ -105,6 +106,13 @@ export default function StudentDashboard() {
   const [results, setResults] = useState([]);
   const [recommendations, setRecommendations] = useState(null);
   const [aiInsights, setAiInsights] = useState(null);
+  const [coreAnalytics, setCoreAnalytics] = useState(null);
+  const [weeklyProgress, setWeeklyProgress] = useState(null);
+  const [learningStreak, setLearningStreak] = useState(null);
+  const [topicMastery, setTopicMastery] = useState(null);
+  const [ranking, setRanking] = useState(null);
+  const [integrity, setIntegrity] = useState(null);
+  const [achievements, setAchievements] = useState(null);
   const [completion, setCompletion] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -138,14 +146,28 @@ export default function StudentDashboard() {
       examService.getMyResults().catch(() => []),
       examService.getPracticeRecommendations().catch(() => null),
       examService.getAiInsights().catch(() => null),
+      examService.getCoreAnalytics().catch(() => null),
+      examService.getWeeklyProgress().catch(() => null),
+      examService.getLearningStreak().catch(() => null),
+      examService.getTopicMastery().catch(() => null),
+      examService.getRanking().catch(() => null),
+      examService.getIntegrityBreakdown().catch(() => null),
+      achievementService.check().catch(() => null),
       authService.getProfileCompletion().catch(() => null),
     ])
-      .then(([data, res, rec, ai, comp]) => {
+      .then(([data, res, rec, ai, core, wp, streak, tm, ranking, integrity, achievements, comp]) => {
         if (cancelled) return;
         setAssignments(data || []);
         setResults(res || []);
         setRecommendations(rec);
         setAiInsights(ai);
+        setCoreAnalytics(core);
+        setWeeklyProgress(wp);
+        setLearningStreak(streak);
+        setTopicMastery(tm);
+        setRanking(ranking);
+        setIntegrity(integrity);
+        setAchievements(achievements);
         setCompletion(comp);
       })
       .catch((err) => {
@@ -291,6 +313,17 @@ export default function StudentDashboard() {
                     {[userCollege, userBranch, userYear].filter(Boolean).join(' \u2022 ')}
                   </p>
                 )}
+                {learningStreak?.has_data && learningStreak.current_streak > 0 && (
+                  <div className="flex items-center gap-sm mb-md bg-white/10 rounded-lg px-sm py-xs w-fit">
+                    <Icon name="local_fire_department" className="text-secondary" />
+                    <span className="text-label-sm text-white font-bold">
+                      {learningStreak.current_streak} day streak
+                    </span>
+                    <span className="text-label-xs text-white/60">
+                      (Best: {learningStreak.longest_streak})
+                    </span>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-md mt-md">
                   <div className="bg-white/10 rounded-xl p-sm text-center backdrop-blur-sm">
                     <p className="text-label-sm text-white/70">Completed</p>
@@ -355,6 +388,56 @@ export default function StudentDashboard() {
               />
             </section>
 
+            {coreAnalytics?.total_exams_completed > 0 && (
+              <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-gutter mb-lg">
+                <h3 className="text-headline-sm text-primary font-bold mb-md">Performance Summary</h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-md">
+                  <div className="bg-surface-container-low rounded-xl p-md text-center border border-outline-variant">
+                    <p className="text-label-sm text-on-surface-variant mb-xs">Average Score</p>
+                    <p className={`text-headline-md font-bold ${
+                      coreAnalytics.overall_average_score >= 75 ? 'text-tertiary' :
+                      coreAnalytics.overall_average_score >= 40 ? 'text-secondary' :
+                      'text-error'
+                    }`}>
+                      {coreAnalytics.overall_average_score != null ? `${Math.round(coreAnalytics.overall_average_score)}%` : '—'}
+                    </p>
+                  </div>
+                  <div className="bg-surface-container-low rounded-xl p-md text-center border border-outline-variant">
+                    <p className="text-label-sm text-on-surface-variant mb-xs">Highest Score</p>
+                    <p className="text-headline-md font-bold text-tertiary">
+                      {coreAnalytics.highest_score != null ? `${Math.round(coreAnalytics.highest_score)}%` : '—'}
+                    </p>
+                  </div>
+                  <div className="bg-surface-container-low rounded-xl p-md text-center border border-outline-variant">
+                    <p className="text-label-sm text-on-surface-variant mb-xs">Lowest Score</p>
+                    <p className={`text-headline-md font-bold ${
+                      coreAnalytics.lowest_score >= 40 ? 'text-secondary' : 'text-error'
+                    }`}>
+                      {coreAnalytics.lowest_score != null ? `${Math.round(coreAnalytics.lowest_score)}%` : '—'}
+                    </p>
+                  </div>
+                  <div className="bg-surface-container-low rounded-xl p-md text-center border border-outline-variant">
+                    <p className="text-label-sm text-on-surface-variant mb-xs">Pass Rate</p>
+                    <p className={`text-headline-md font-bold ${
+                      coreAnalytics.pass_percentage >= 75 ? 'text-tertiary' :
+                      coreAnalytics.pass_percentage >= 50 ? 'text-secondary' :
+                      'text-error'
+                    }`}>
+                      {coreAnalytics.pass_percentage != null ? `${Math.round(coreAnalytics.pass_percentage)}%` : '—'}
+                    </p>
+                  </div>
+                  <div className="bg-surface-container-low rounded-xl p-md text-center border border-outline-variant">
+                    <p className="text-label-sm text-on-surface-variant mb-xs">Total Time</p>
+                    <p className="text-headline-md font-bold text-primary">
+                      {coreAnalytics.total_time_spent_seconds > 0
+                        ? `${Math.round(coreAnalytics.total_time_spent_seconds / 60)}m`
+                        : '—'}
+                    </p>
+                  </div>
+                </div>
+              </section>
+            )}
+
             {results.length > 0 && (
               <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-gutter mb-lg">
                 <h3 className="text-headline-sm text-primary font-bold mb-md">Progress Overview</h3>
@@ -402,6 +485,28 @@ export default function StudentDashboard() {
                     <p className="text-label-xs text-on-surface-variant text-center mt-xs">Last {Math.min(results.length, 7)} exams</p>
                   </div>
                 </div>
+                {weeklyProgress?.has_data && weeklyProgress.weekly_progress.length > 0 && (
+                  <div className="mt-md pt-md border-t border-outline-variant">
+                    <p className="text-label-md text-on-surface-variant mb-sm font-bold">Weekly Progress</p>
+                    <div className="flex items-end h-20 gap-1">
+                      {weeklyProgress.weekly_progress.slice(-6).map((w) => {
+                        const pct = w.average_score || 0;
+                        const h = Math.max(4, (pct / 100) * 64);
+                        let color;
+                        if (pct >= 75) color = 'bg-tertiary';
+                        else if (pct >= 40) color = 'bg-secondary';
+                        else color = 'bg-error';
+                        return (
+                          <div key={w.week_start} className="flex-1 flex flex-col items-center justify-end h-full gap-0.5">
+                            <span className="text-label-xs text-on-surface-variant">{Math.round(pct)}</span>
+                            <div className={`w-full rounded-t ${color}`} style={{ height: `${h}px` }} />
+                            <span className="text-label-xs text-on-surface-variant truncate w-full text-center">{w.week_start.slice(5)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 {aiInsights?.has_data && (
                   <div className="mt-md pt-md border-t border-outline-variant">
                     <p className="text-label-sm text-on-surface-variant">{aiInsights.overall_assessment}</p>
@@ -414,6 +519,25 @@ export default function StudentDashboard() {
               <section className="lg:col-span-4 space-y-gutter">
                 <div className="bg-primary-container p-gutter rounded-xl text-on-primary-container relative overflow-hidden">
                   <h3 className="text-headline-sm mb-md text-white font-bold">Intelligence Profile</h3>
+                  {aiInsights?.trend_analysis && (
+                    <div className="flex flex-wrap gap-1 mb-md">
+                      <span className={`text-label-xs px-xs py-0.5 rounded ${
+                        aiInsights.trend_analysis.direction === 'up' ? 'bg-tertiary text-white' :
+                        aiInsights.trend_analysis.direction === 'down' ? 'bg-error text-white' :
+                        'bg-white/10 text-white/80'
+                      }`}>
+                        Trend: {aiInsights.trend_analysis.direction === 'up' ? '\u2191' : aiInsights.trend_analysis.direction === 'down' ? '\u2193' : '\u2192'} {aiInsights.trend_analysis.direction}
+                      </span>
+                      <span className="text-label-xs bg-white/10 text-white/80 px-xs py-0.5 rounded">
+                        Volatility: {aiInsights.trend_analysis.volatility}
+                      </span>
+                      {aiInsights.performance_prediction?.estimated_next_score != null && (
+                        <span className="text-label-xs bg-secondary text-white px-xs py-0.5 rounded">
+                          Next: ~{aiInsights.performance_prediction.estimated_next_score}%
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {subjectPerformance.length > 0 ? (
                     subjectPerformance.map((s) => {
                       let colors;
@@ -452,6 +576,43 @@ export default function StudentDashboard() {
                     <div className="text-center py-lg">
                       <Icon name="insights" className="text-4xl text-white/30 mb-sm" />
                       <p className="text-label-md text-white/60">Complete exams to unlock your AI intelligence profile</p>
+                    </div>
+                  )}
+                  {topicMastery?.has_data && topicMastery.topics.length > 0 && (
+                    <div className="mt-md pt-md border-t border-white/10">
+                      <p className="text-label-md text-white font-bold mb-sm">Topic Mastery</p>
+                      {topicMastery.topics.slice(0, 4).map((t) => {
+                        let barColor;
+                        if (t.status === 'strong') barColor = 'bg-tertiary';
+                        else if (t.status === 'average') barColor = 'bg-secondary';
+                        else barColor = 'bg-error';
+                        return (
+                          <div key={t.topic} className="mb-sm">
+                            <div className="flex justify-between text-label-xs text-white/80 mb-0.5">
+                              <span className="truncate">{t.topic}</span>
+                              <span className="shrink-0 ml-1">{t.average_score != null ? `${Math.round(t.average_score)}%` : '—'}</span>
+                            </div>
+                            <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.min(t.average_score || 0, 100)}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {aiInsights?.time_analysis && (
+                    <div className="mt-md pt-md border-t border-white/10">
+                      <p className="text-label-md text-white font-bold mb-sm">Time Analysis</p>
+                      <div className="grid grid-cols-2 gap-sm">
+                        <div className="bg-white/5 rounded-lg p-xs text-center">
+                          <p className="text-label-xs text-white/60">Avg Time/Exam</p>
+                          <p className="text-label-sm text-white font-bold">{aiInsights.time_analysis.average_time_per_exam_minutes}m</p>
+                        </div>
+                        <div className="bg-white/5 rounded-lg p-xs text-center">
+                          <p className="text-label-xs text-white/60">Efficiency</p>
+                          <p className="text-label-sm text-white font-bold capitalize">{aiInsights.time_analysis.time_efficiency}</p>
+                        </div>
+                      </div>
                     </div>
                   )}
                   <div className="mt-lg p-sm bg-white/5 rounded-lg border border-white/10">
@@ -518,6 +679,72 @@ export default function StudentDashboard() {
                     </Link>
                   )}
                 </div>
+
+                {ranking?.has_data && (ranking.institution_rank || ranking.department_rank || ranking.batch_rank || ranking.overall_rank) && (
+                  <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+                    <div className="flex items-center gap-sm mb-sm">
+                      <Icon name="emoji_events" className="text-secondary" />
+                      <h3 className="text-label-md font-bold text-primary">My Rankings</h3>
+                    </div>
+                    <div className="space-y-sm">
+                      {ranking.institution_rank && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-label-sm text-on-surface">{ranking.institution_rank.label}</span>
+                          <span className="text-label-sm font-bold text-primary">
+                            #{ranking.institution_rank.rank} / {ranking.institution_rank.total_students}
+                          </span>
+                        </div>
+                      )}
+                      {ranking.department_rank && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-label-sm text-on-surface">{ranking.department_rank.label}</span>
+                          <span className="text-label-sm font-bold text-primary">
+                            #{ranking.department_rank.rank} / {ranking.department_rank.total_students}
+                          </span>
+                        </div>
+                      )}
+                      {ranking.batch_rank && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-label-sm text-on-surface">{ranking.batch_rank.label}</span>
+                          <span className="text-label-sm font-bold text-primary">
+                            #{ranking.batch_rank.rank} / {ranking.batch_rank.total_students}
+                          </span>
+                        </div>
+                      )}
+                      {ranking.overall_rank && (
+                        <div className="flex items-center justify-between pt-xs border-t border-outline-variant">
+                          <span className="text-label-sm font-bold text-on-surface">Overall</span>
+                          <span className="text-label-sm font-bold text-secondary">
+                            #{ranking.overall_rank.rank} / {ranking.overall_rank.total_students}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {achievements?.has_data && achievements.achievements.length > 0 && (
+                  <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+                    <div className="flex items-center gap-sm mb-sm">
+                      <Icon name="stars" className="text-secondary" />
+                      <h3 className="text-label-md font-bold text-primary">Achievements</h3>
+                      <span className="text-label-xs text-on-surface-variant ml-auto">
+                        {achievements.total_unlocked}/{achievements.total_available}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-xs">
+                      {achievements.achievements.slice(0, 9).map((a) => (
+                        <div key={a.achievement_id} className={`relative flex flex-col items-center text-center p-xs rounded-lg transition-all ${
+                          a.is_new ? 'bg-secondary-container animate-pulse' : 'bg-surface-container hover:bg-surface-container-high'
+                        }`} title={`${a.title}: ${a.description}`}>
+                          <Icon name={a.icon} className={`text-lg ${a.is_new ? 'text-secondary' : 'text-primary'}`} />
+                          <span className="text-label-xs text-on-surface-variant mt-0.5 leading-tight truncate w-full">{a.title}</span>
+                          {a.is_new && <span className="absolute -top-1 -right-1 w-2 h-2 bg-secondary rounded-full" />}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {voiceVerificationExams.length > 0 && (
                   <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
@@ -624,6 +851,61 @@ export default function StudentDashboard() {
                   </div>
                 )}
 
+                {integrity?.has_data && (
+                  <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
+                    <div className="flex items-center gap-sm mb-md">
+                      <Icon name="verified" className="text-secondary" />
+                      <h3 className="text-headline-sm text-primary font-bold">AI Integrity</h3>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-md mb-md">
+                      <div className="bg-surface-container-low rounded-xl p-md text-center border border-outline-variant">
+                        <p className="text-label-sm text-on-surface-variant mb-xs">Overall Integrity</p>
+                        <p className={`text-headline-md font-bold ${
+                          integrity.overall_integrity >= 80 ? 'text-tertiary' :
+                          integrity.overall_integrity >= 50 ? 'text-secondary' : 'text-error'
+                        }`}>
+                          {integrity.overall_integrity != null ? `${Math.round(integrity.overall_integrity)}%` : '—'}
+                        </p>
+                      </div>
+                      <div className="bg-surface-container-low rounded-xl p-md border border-outline-variant">
+                        <p className="text-label-sm text-on-surface-variant mb-xs">Integrity by Exam</p>
+                        <div className="space-y-1">
+                          {integrity.integrity_by_exam.slice(0, 4).map((ie) => (
+                            <div key={ie.exam_id} className="flex items-center justify-between text-label-xs">
+                              <span className="truncate text-on-surface mr-1">{ie.exam_title}</span>
+                              <span className={`shrink-0 font-bold ${
+                                ie.integrity_percentage >= 80 ? 'text-tertiary' :
+                                ie.integrity_percentage >= 50 ? 'text-secondary' :
+                                'text-error'
+                              }`}>
+                                {ie.integrity_percentage != null ? `${Math.round(ie.integrity_percentage)}%` : '—'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    {integrity.event_breakdown.length > 0 && (
+                      <div className="pt-md border-t border-outline-variant">
+                        <p className="text-label-sm text-on-surface-variant mb-sm font-bold">Event Breakdown</p>
+                        <div className="flex flex-wrap gap-1">
+                          {integrity.event_breakdown.map((ev) => (
+                            <span key={`${ev.event_type}-${ev.severity}`}
+                              className={`text-label-xs px-xs py-0.5 rounded ${
+                                ev.severity === 'critical' || ev.severity === 'high' ? 'bg-error-container text-error' :
+                                ev.severity === 'medium' ? 'bg-secondary-container text-secondary' :
+                                'bg-surface-container text-on-surface-variant'
+                              }`}
+                            >
+                              {ev.event_type.replace(/_/g, ' ')}: {ev.count}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {recommendations?.has_data && recommendations.recommendations.length > 0 && (
                   <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-md">
                     <div className="flex items-center gap-sm mb-md">
@@ -635,6 +917,26 @@ export default function StudentDashboard() {
                         <p className="text-label-sm text-error font-bold">
                           Focus needed: {recommendations.weak_subjects.join(', ')}
                         </p>
+                      </div>
+                    )}
+                    {recommendations.performance_trajectory && (
+                      <div className="grid grid-cols-2 gap-sm mb-md">
+                        <div className="bg-surface-container rounded-lg p-xs text-center">
+                          <p className="text-label-xs text-on-surface-variant">Trend</p>
+                          <p className={`text-label-sm font-bold ${
+                            recommendations.performance_trajectory.trend === 'up' ? 'text-tertiary' :
+                            recommendations.performance_trajectory.trend === 'down' ? 'text-error' : 'text-secondary'
+                          }`}>
+                            {recommendations.performance_trajectory.trend === 'up' ? '\u2191 Improving' :
+                             recommendations.performance_trajectory.trend === 'down' ? '\u2193 Declining' : '\u2192 Stable'}
+                          </p>
+                        </div>
+                        {recommendations.performance_trajectory.consistency_score != null && (
+                          <div className="bg-surface-container rounded-lg p-xs text-center">
+                            <p className="text-label-xs text-on-surface-variant">Consistency</p>
+                            <p className="text-label-sm font-bold text-primary">{recommendations.performance_trajectory.consistency_score}%</p>
+                          </div>
+                        )}
                       </div>
                     )}
                     <div className="space-y-md">
@@ -673,6 +975,50 @@ export default function StudentDashboard() {
                         );
                       })}
                     </div>
+                    {recommendations.topic_recommendations?.length > 0 && (
+                      <div className="mt-md pt-md border-t border-outline-variant">
+                        <p className="text-label-sm text-primary font-bold mb-sm">Topic-Level Focus</p>
+                        <div className="space-y-sm">
+                          {recommendations.topic_recommendations.slice(0, 4).map((tr) => (
+                            <div key={tr.topic} className="flex items-start gap-sm">
+                              <span className={`shrink-0 mt-0.5 w-1.5 h-1.5 rounded-full ${
+                                tr.status === 'weak' ? 'bg-error' :
+                                tr.status === 'average' ? 'bg-secondary' : 'bg-tertiary'
+                              }`} />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-label-sm text-on-surface truncate">{tr.topic}</p>
+                                <div className="flex flex-wrap gap-0.5 mt-0.5">
+                                  {tr.suggested_focus.slice(0, 2).map((tip) => (
+                                    <span key={tip} className="text-label-xs text-on-surface-variant">{tip}</span>
+                                  ))}
+                                </div>
+                              </div>
+                              <span className={`text-label-xs font-bold shrink-0 ${
+                                tr.status === 'weak' ? 'text-error' :
+                                tr.status === 'average' ? 'text-secondary' : 'text-tertiary'
+                              }`}>
+                                {tr.average_score != null ? `${Math.round(tr.average_score)}%` : '—'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {recommendations.time_management_tips?.length > 0 && (
+                      <div className="mt-md pt-md border-t border-outline-variant">
+                        <p className="text-label-sm text-primary font-bold mb-sm">Time Management Tips</p>
+                        <div className="space-y-1">
+                          {recommendations.time_management_tips.slice(0, 3).map((tmt, i) => (
+                            <div key={i} className="flex items-start gap-sm">
+                              <Icon name={tmt.priority === 'high' ? 'priority_high' : 'info'} className={`shrink-0 mt-0.5 text-label-sm ${
+                                tmt.priority === 'high' ? 'text-error' : 'text-secondary'
+                              }`} />
+                              <p className="text-label-sm text-on-surface-variant">{tmt.tip}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </section>

@@ -67,3 +67,33 @@ def mark_all_read(
     )
     db.commit()
     return {"message": "All notifications marked as read"}
+
+
+@router.get("/unread-count")
+def unread_count(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    count = (
+        db.query(Notification)
+        .filter(
+            Notification.user_id == current_user.id,
+            Notification.is_read == False,
+        )
+        .count()
+    )
+    return {"unread_count": count}
+
+
+@router.post("/generate-analytics")
+def generate_analytics_notifications(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.services.achievement_service import AchievementService
+
+    new_achievements = AchievementService.check_and_unlock(db, current_user)
+    return {
+        "new_achievements": len(new_achievements),
+        "message": f"{len(new_achievements)} new achievement(s) unlocked",
+    }
