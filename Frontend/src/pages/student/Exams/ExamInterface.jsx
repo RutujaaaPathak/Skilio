@@ -1146,46 +1146,6 @@ export default function ExamInterface() {
             </div>
           </div>
 
-          {/* Test Simulation Panel */}
-          <div className="bg-surface-container-lowest rounded-xl border border-outline-variant p-md space-y-xs">
-            <div className="flex justify-between items-center mb-xs border-b pb-xs">
-              <h4 className="text-label-sm font-bold text-primary uppercase tracking-wider">Simulation Panel</h4>
-              <span className="text-[9px] px-sm bg-secondary-container text-primary font-bold uppercase rounded">Test Tools</span>
-            </div>
-            <div className="grid grid-cols-2 gap-xs">
-              <button 
-                onClick={() => triggerViolation("Mobile phone detected inside proctor frame!", "phone_detected", 0.95)}
-                className="py-1 px-1 bg-error/10 text-error hover:bg-error/20 border border-error/30 text-[9px] font-bold rounded cursor-pointer text-center"
-              >
-                Simulate Phone
-              </button>
-              <button 
-                onClick={() => triggerViolation("Tab switch/minimization detected!", "tab_switch", 0.9)}
-                className="py-1 px-1 bg-warning/10 text-warning-container hover:bg-warning/20 border border-warning/30 text-[9px] font-bold rounded cursor-pointer text-center"
-              >
-                Simulate Tab Switch
-              </button>
-              <button 
-                onClick={() => triggerViolation("Face not detected. Please face the camera.", "no_face_detected", 0.7)}
-                className="py-1 px-1 bg-secondary-container/20 text-primary hover:bg-secondary-container/40 border border-secondary/30 text-[9px] font-bold rounded cursor-pointer text-center"
-              >
-                Simulate No Face
-              </button>
-              <button 
-                onClick={() => triggerViolation("Multiple faces detected in camera view!", "multiple_faces_detected", 0.9)}
-                className="py-1 px-1 bg-secondary-container/20 text-primary hover:bg-secondary-container/40 border border-secondary/30 text-[9px] font-bold rounded cursor-pointer text-center"
-              >
-                Simulate Multi-Face
-              </button>
-            </div>
-            <button
-              onClick={() => alert("Demo Security: Full AI proctoring suite coming soon!")}
-              className="w-full py-md mt-xs bg-gradient-to-r from-secondary to-primary text-white font-bold rounded-lg text-xs hover:opacity-90 flex items-center justify-center gap-xs cursor-pointer shadow-md transition-all hover:scale-[1.02]"
-            >
-              <Icon name="security" /> Demo Security
-            </button>
-          </div>
-
           <button 
             onClick={handleManualSubmit}
             className="h-12 bg-error text-on-error rounded-lg flex items-center justify-center font-bold gap-xs cursor-pointer hover:opacity-90"
