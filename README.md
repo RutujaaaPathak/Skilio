@@ -1,12 +1,12 @@
-# Skilio
+# Skillo
 
 ### AI-Powered Intelligent Assessment & Academic Integrity Platform
 
-Skilio is a next-generation examination and assessment platform designed to ensure secure, fair, and adaptive evaluations in the age of Artificial Intelligence.
+Skillo is a next-generation examination and assessment platform designed to ensure secure, fair, and adaptive evaluations in the age of Artificial Intelligence.
 
-Traditional online examination systems struggle to detect modern cheating methods such as AI-generated answers, second-device usage, and answer replication. Skilio addresses these challenges through AI-powered proctoring, behavioral analytics, adaptive testing, voice-based understanding verification, and real-time paper generation.
+Traditional online examination systems struggle to detect modern cheating methods such as AI-generated answers, second-device usage, and answer replication. Skillo addresses these challenges through AI-powered proctoring, behavioral analytics, adaptive testing, voice-based understanding verification, and real-time paper generation.
 
-Rather than simply evaluating answers, Skilio focuses on assessing genuine understanding, skills, and academic integrity.
+Rather than simply evaluating answers, Skillo focuses on assessing genuine understanding, skills, and academic integrity.
 
 ---
 
@@ -22,7 +22,7 @@ Current examination platforms can detect tab switching and basic suspicious beha
 * Lack of conceptual understanding
 * Question paper leaks
 
-Skilio aims to solve these challenges through intelligent assessment and verification mechanisms.
+Skillo aims to solve these challenges through intelligent assessment and verification mechanisms.
 
 ---
 
