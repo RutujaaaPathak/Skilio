@@ -182,11 +182,11 @@ To build a secure, intelligent, and future-ready assessment ecosystem that evalu
 ## Team
 
 Developed for an International Hackathon FARAWAY 2026 .
-*Harsh gahankar (lead) -> Frontend and UI/IX developer
-*Aanchal Jain -> Frontend Developer
-*Shrey Ruparel -> AI/ML engineer 
-*Rutuja Pathak -> Backend Developer
-*Omkar Wayal -> Backend Developer and Deployment Expert
+* Harsh gahankar (lead) -> Frontend and UI/IX developer
+* Aanchal Jain -> Frontend Developer
+* Shrey Ruparel -> AI/ML engineer 
+* Rutuja Pathak -> Backend Developer
+* Omkar Wayal -> Backend Developer and Deployment Expert
 
 ---
 
