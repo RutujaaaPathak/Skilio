@@ -3,20 +3,19 @@ import { NavLink, Link } from 'react-router-dom';
 import Icon from './Icon.jsx';
 import NotificationPanel from './NotificationPanel.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
-import { useTheme } from '../context/ThemeContext.jsx';
 import { authService } from '../services/authService.js';
 
 const links = [
   { to: '/student/dashboard', label: 'Dashboard', icon: 'dashboard' },
   { to: '/student/profile', label: 'My Profile', icon: 'person' },
   { to: '/student/exams', label: 'Exams', icon: 'assignment' },
+  { to: '/student/classes', label: 'Classes', icon: 'groups' },
   { to: '/student/analytics/performance', label: 'Performance', icon: 'leaderboard' },
   { to: '/student/settings', label: 'Settings', icon: 'settings' }
 ];
 
 export default function StudentLayout({ title = 'Candidate Overview', children }) {
   const { user, logout } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const [completion, setCompletion] = useState(null);
   const displayName = user?.name || 'Student';
   const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'ST';
@@ -90,13 +89,6 @@ export default function StudentLayout({ title = 'Candidate Overview', children }
             <div className="relative">
               <NotificationPanel />
             </div>
-            <button
-              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-              onClick={toggleTheme}
-              className="rounded-full p-1 text-on-surface-variant hover:bg-surface-container-highest transition-colors"
-            >
-              <Icon name={theme === 'dark' ? 'light_mode' : 'dark_mode'} ariaHidden={false} />
-            </button>
             <button aria-label="Help" className="rounded-full p-1 text-on-surface-variant hover:bg-surface-container-highest transition-colors">
               <Icon name="help_outline" ariaHidden={false} />
             </button>

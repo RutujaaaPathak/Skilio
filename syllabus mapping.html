@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Skillo Pro - Syllabus Mapping</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .nav-item-active { border-right: 4px solid #0050cb; font-weight: 700; color: #0050cb; background: #f2f3ff; }
+        .tab-active { border-bottom: 2px solid #0050cb; color: #0050cb; }
+        .premium-shadow { box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 10px -2px rgba(0, 0, 0, 0.04); }
+        .heatmap-pill { transition: all 0.2s; }
+        .heatmap-pill:hover { transform: translateY(-2px); filter: brightness(0.95); }
+    </style>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                "on-surface": "#131b2e",
+                "on-secondary": "#ffffff",
+                "secondary-fixed": "#d3e4fe",
+                "on-primary-fixed": "#001849",
+                "secondary-fixed-dim": "#b7c8e1",
+                "surface-container-lowest": "#ffffff",
+                "inverse-on-surface": "#eef0ff",
+                "on-primary-fixed-variant": "#003fa4",
+                "primary-fixed-dim": "#b3c5ff",
+                "on-tertiary-fixed": "#390c00",
+                "surface-container-high": "#e2e7ff",
+                "on-tertiary": "#ffffff",
+                "secondary-container": "#d0e1fb",
+                "on-primary": "#ffffff",
+                "surface-bright": "#faf8ff",
+                "surface-container-low": "#f2f3ff",
+                "surface-tint": "#0054d6",
+                "surface-variant": "#dae2fd",
+                "on-background": "#131b2e",
+                "tertiary": "#a33200",
+                "primary": "#0050cb",
+                "on-secondary-fixed": "#0b1c30",
+                "on-primary-container": "#f8f7ff",
+                "inverse-surface": "#283044",
+                "on-tertiary-fixed-variant": "#832600",
+                "on-secondary-fixed-variant": "#38485d",
+                "surface": "#faf8ff",
+                "error": "#ba1a1a",
+                "on-surface-variant": "#424656",
+                "tertiary-fixed-dim": "#ffb59d",
+                "tertiary-fixed": "#ffdbd0",
+                "tertiary-container": "#cc4204",
+                "outline-variant": "#c2c6d8",
+                "on-tertiary-container": "#fff6f4",
+                "primary-container": "#0066ff",
+                "outline": "#727687",
+                "background": "#faf8ff",
+                "inverse-primary": "#b3c5ff",
+                "on-error-container": "#93000a",
+                "on-secondary-container": "#54647a",
+                "primary-fixed": "#dae1ff",
+                "surface-container-highest": "#dae2fd",
+                "surface-container": "#eaedff",
+                "error-container": "#ffdad6",
+                "secondary": "#505f76",
+                "on-error": "#ffffff",
+                "surface-dim": "#d2d9f4",
+                "success": "#15803d",
+                "warning": "#b45309",
+                "danger": "#b91c1c"
+            },
+            "borderRadius": {
+                "DEFAULT": "0.25rem",
+                "lg": "0.5rem",
+                "xl": "12px",
+                "xxl": "16px",
+                "full": "9999px"
+            },
+            "spacing": {
+                "lg": "24px", "base": "4px", "sm": "8px", "md": "16px", "gutter": "24px", "xl": "32px", "xxl": "48px", "margin-desktop": "40px", "xs": "4px", "margin-mobile": "16px"
+            },
+            "fontFamily": {
+                "headline-sm": ["Inter"], "display-lg": ["Inter"], "body-sm": ["Inter"], "body-md": ["Inter"], "headline-md": ["Inter"], "headline-lg": ["Inter"], "label-sm": ["Inter"], "body-lg": ["Inter"], "label-md": ["Inter"]
+            },
+            "fontSize": {
+                "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                "label-sm": ["12px", {"lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500"}],
+                "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                "label-md": ["14px", {"lineHeight": "20px", "fontWeight": "500"}]
+            }
+          }
+        }
+      }
+    </script>
+</head>
+<body class="bg-background text-on-surface">
+<!-- Side Navigation Shell -->
+<aside class="h-screen w-64 fixed left-0 top-0 border-r border-outline-variant bg-surface flex flex-col py-lg px-md z-50">
+<div class="mb-xl px-sm flex items-center gap-base">
+<img alt="Skillo Pro Logo" class="h-10 w-10 object-contain" src="https://lh3.googleusercontent.com/aida/AP1WRLsvPhyrDtN8gbGcxop5cFqEP8TfzC16W7axnfLRGMaieO2YRvKG7RXU_P_4GxqESQIU8fJWGBbtQEpX7KahZFe5X4_9OWuyP1-mCmS4fESu5au_awdsnvXSWkaxRC3RZ8B3avJNXV1WESYJHq8yX7uhdHnpPYELgiIbK0ZoHexcdAz759pHzj_GP0aIfvApuo0FHxN5JrXOUbpKtRN2XYdExHSPl5KJ57HM_yevloZ_gUsUZNX-F-i_pFpv"/>
+<div>
+<h1 class="font-headline-md text-headline-md font-bold text-primary">Skillo Pro</h1>
+<p class="text-label-sm font-label-sm text-secondary">Educator Portal</p>
+</div>
+</div>
+<nav class="flex-1 space-y-base overflow-y-auto custom-scrollbar">
+<a class="flex items-center gap-md px-md py-sm rounded-lg text-secondary hover:bg-surface-container-low transition-colors group" href="#">
+<span class="material-symbols-outlined text-md">dashboard</span>
+<span class="font-label-md text-label-md">Dashboard</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm rounded-lg nav-item-active transition-colors group" href="#">
+<span class="material-symbols-outlined text-md">auto_stories</span>
+<span class="font-label-md text-label-md">Curriculum</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm rounded-lg text-secondary hover:bg-surface-container-low transition-colors group" href="#">
+<span class="material-symbols-outlined text-md">group</span>
+<span class="font-label-md text-label-md">Students</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm rounded-lg text-secondary hover:bg-surface-container-low transition-colors group" href="#">
+<span class="material-symbols-outlined text-md">analytics</span>
+<span class="font-label-md text-label-md">Analytics</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm rounded-lg text-secondary hover:bg-surface-container-low transition-colors group" href="#">
+<span class="material-symbols-outlined text-md">folder_shared</span>
+<span class="font-label-md text-label-md">Resources</span>
+</a>
+<a class="flex items-center gap-md px-md py-sm rounded-lg text-secondary hover:bg-surface-container-low transition-colors group" href="#">
+<span class="material-symbols-outlined text-md">settings</span>
+<span class="font-label-md text-label-md">Settings</span>
+</a>
+</nav>
+<div class="mt-auto pt-md border-t border-outline-variant">
+<button class="w-full flex items-center justify-center gap-sm bg-primary text-on-primary py-sm rounded-xl font-label-md shadow-sm hover:opacity-90 transition-all">
+<span class="material-symbols-outlined text-base">add</span>
+            New Course
+        </button>
+</div>
+</aside>
+<!-- Top AppBar Shell -->
+<header class="fixed top-0 right-0 left-64 h-16 bg-surface border-b border-outline-variant flex items-center justify-between px-gutter z-40">
+<div class="flex items-center gap-xl">
+<h2 class="font-headline-sm text-headline-sm font-black text-on-surface">Syllabus</h2>
+<nav class="hidden lg:flex gap-lg items-center h-16">
+<a class="text-on-surface-variant hover:text-primary transition-all font-label-md text-label-md" href="#">Subjects</a>
+<a class="text-on-surface-variant hover:text-primary transition-all font-label-md text-label-md" href="#">Lesson Plans</a>
+<a class="text-on-surface-variant hover:text-primary transition-all font-label-md text-label-md" href="#">Question Bank</a>
+</nav>
+</div>
+<div class="flex items-center gap-lg">
+<div class="relative hidden sm:block">
+<span class="material-symbols-outlined absolute left-md top-1/2 -translate-y-1/2 text-outline">search</span>
+<input class="pl-xl pr-md py-sm bg-surface-container-low border border-outline-variant rounded-full text-label-md focus:outline-none focus:border-primary w-64 transition-all" placeholder="Search syllabus..." type="text"/>
+</div>
+<div class="flex items-center gap-md">
+<button class="p-sm rounded-full hover:bg-surface-container transition-colors relative">
+<span class="material-symbols-outlined text-on-surface-variant">notifications</span>
+<span class="absolute top-sm right-sm w-2 h-2 bg-error rounded-full"></span>
+</button>
+<div class="h-8 w-8 rounded-full overflow-hidden border border-outline-variant">
+<img class="h-full w-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDnZKv4G9-2kpE-ZRdpzhFuUFitW7jnpzrmuQA1ekGqmifntA_nei4gsc9CG1Z0e5AzDvlor43ytPow9SEtOYN1kVa2EOT-VDihQt1TBWd2Qk6LK7lXFPRz5s1B3P5RDh3PP_A9rgWshbflsqPseIkuRy01S4LyBFh4V5R-KkQt4xmxGXdvibeISTVOWIpEtTpv-LMJp9WqkXxkN7v3ORC1x3e1JsanKC1-TMPco42-y2PNRNcuWjoVlQ"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-64 mt-16 p-lg bg-[#f8fafc] min-h-screen pb-32">
+<!-- Breadcrumb & Header -->
+<div class="flex flex-col gap-md mb-xl">
+<div class="flex items-center text-label-sm text-secondary gap-xs">
+<span>Dashboard</span>
+<span class="material-symbols-outlined text-xs">chevron_right</span>
+<span>Subjects</span>
+<span class="material-symbols-outlined text-xs">chevron_right</span>
+<span class="text-primary font-bold">Data Structures</span>
+</div>
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-md">
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight">Syllabus Mapping</h1>
+<div class="flex flex-wrap items-center gap-sm">
+<button class="flex items-center gap-sm px-md py-sm border border-outline-variant bg-white rounded-xl text-label-md hover:bg-surface-container-low transition-all premium-shadow">
+<span class="material-symbols-outlined text-md">upload</span>
+                    Import
+                </button>
+<button class="flex items-center gap-sm px-md py-sm border border-outline-variant bg-white rounded-xl text-label-md hover:bg-surface-container-low transition-all premium-shadow">
+<span class="material-symbols-outlined text-md">download</span>
+                    Export
+                </button>
+<button class="flex items-center gap-sm px-md py-sm bg-primary text-on-primary rounded-xl text-label-md shadow-lg hover:opacity-90 transition-all">
+<span class="material-symbols-outlined text-md">add_circle</span>
+                    New Topic
+                </button>
+</div>
+</div>
+</div>
+<!-- Analytics Cards Layer -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-lg mb-xl">
+<div class="bg-white p-lg rounded-xxl border border-outline-variant premium-shadow flex items-center justify-between hover:border-primary transition-all group">
+<div>
+<p class="text-label-md text-secondary mb-base">Overall Coverage</p>
+<h3 class="font-headline-md text-headline-md font-bold flex items-center gap-sm">
+                    84%
+                    <span class="text-success text-label-sm font-bold">↑ +5%</span>
+</h3>
+</div>
+<div class="relative w-12 h-12">
+<svg class="w-full h-full -rotate-90">
+<circle cx="24" cy="24" fill="transparent" r="20" stroke="#f1f5f9" stroke-width="4"></circle>
+<circle cx="24" cy="24" fill="transparent" r="20" stroke="#0050cb" stroke-dasharray="125.6" stroke-dashoffset="20" stroke-linecap="round" stroke-width="4"></circle>
+</svg>
+</div>
+</div>
+<div class="bg-white p-lg rounded-xxl border border-outline-variant premium-shadow flex items-center justify-between group hover:border-primary transition-all">
+<div>
+<p class="text-label-md text-secondary mb-base">Mapped Questions</p>
+<h3 class="font-headline-md text-headline-md font-bold">342</h3>
+<p class="text-success text-[10px] font-bold">↑ +12% this month</p>
+</div>
+<div class="w-12 h-12 bg-primary-container/10 flex items-center justify-center rounded-xl text-primary">
+<span class="material-symbols-outlined text-lg">quiz</span>
+</div>
+</div>
+<div class="bg-white p-lg rounded-xxl border border-outline-variant premium-shadow flex items-center justify-between group hover:border-primary transition-all">
+<div>
+<p class="text-label-md text-secondary mb-base">Completed Topics</p>
+<h3 class="font-headline-md text-headline-md font-bold">18/24</h3>
+</div>
+<div class="relative w-12 h-12">
+<svg class="w-full h-full -rotate-90">
+<circle cx="24" cy="24" fill="transparent" r="20" stroke="#f1f5f9" stroke-width="4"></circle>
+<circle cx="24" cy="24" fill="transparent" r="20" stroke="#0050cb" stroke-dasharray="125.6" stroke-dashoffset="31.4" stroke-linecap="round" stroke-width="4"></circle>
+</svg>
+</div>
+</div>
+<div class="bg-primary p-lg rounded-xxl shadow-xl flex items-center justify-between text-on-primary">
+<div>
+<p class="text-label-md opacity-80 mb-base">Upcoming Mid-Sem</p>
+<h3 class="font-headline-md text-headline-md font-bold">72% Ready</h3>
+<p class="text-white/70 text-[10px] font-bold">Scheduled Oct 15</p>
+</div>
+<div class="w-12 h-12 bg-white/20 flex items-center justify-center rounded-xl">
+<span class="material-symbols-outlined text-lg">calendar_month</span>
+</div>
+</div>
+</div>
+<!-- Workspace Grid -->
+<div class="grid grid-cols-12 gap-lg min-h-[700px]">
+<!-- LEFT PANEL: Syllabus Explorer -->
+<div class="col-span-12 lg:col-span-3 bg-white border border-outline-variant rounded-xxl flex flex-col overflow-hidden premium-shadow">
+<div class="p-md border-b border-outline-variant bg-surface-container-lowest">
+<div class="flex items-center justify-between mb-md">
+<h4 class="font-label-md text-label-md font-bold">Syllabus Explorer</h4>
+<span class="text-[10px] bg-surface-container-high px-base py-[2px] rounded-full text-secondary">v2.4</span>
+</div>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-outline text-md">search</span>
+<input class="w-full pl-xl pr-sm py-xs bg-surface-container-low border border-outline-variant rounded-lg text-body-sm focus:outline-none focus:border-primary transition-all" placeholder="Find topic..." type="text"/>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto custom-scrollbar p-md space-y-lg">
+<!-- Unit 1 -->
+<div class="space-y-sm">
+<div class="flex flex-col gap-base group cursor-pointer">
+<div class="flex items-center justify-between text-body-sm font-bold">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-md text-secondary">expand_more</span>
+<span>Unit 1: Introduction</span>
+</div>
+<span class="text-[10px] text-secondary">4/4 Topics</span>
+</div>
+<div class="w-full h-1 bg-surface-container-low rounded-full overflow-hidden">
+<div class="h-full bg-success w-full"></div>
+</div>
+</div>
+<div class="ml-xl space-y-1 border-l border-outline-variant pl-md">
+<div class="group relative flex items-center gap-sm p-sm rounded-lg hover:bg-surface-container-low cursor-pointer transition-all">
+<div class="w-2 h-2 rounded-full bg-success"></div>
+<span class="text-body-sm truncate">Overview &amp; Complexity</span>
+<div class="absolute right-2 opacity-0 group-hover:opacity-100 bg-white border border-outline-variant px-sm py-1 rounded shadow-sm text-[9px] z-10">5Q | 2LO</div>
+</div>
+</div>
+</div>
+<!-- Unit 2 (Active) -->
+<div class="space-y-sm">
+<div class="flex flex-col gap-base group cursor-pointer">
+<div class="flex items-center justify-between text-body-sm font-bold text-primary">
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined text-md">expand_more</span>
+<span>Unit 2: Linear Structures</span>
+</div>
+<span class="text-[10px]">2/3 Topics</span>
+</div>
+<div class="w-full h-1 bg-surface-container-low rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[65%]"></div>
+</div>
+</div>
+<div class="ml-xl space-y-1 border-l border-outline-variant pl-md">
+<div class="flex items-center gap-sm p-sm rounded-lg hover:bg-surface-container-low cursor-pointer group relative">
+<div class="w-2 h-2 rounded-full bg-success"></div>
+<span class="text-body-sm truncate">Linked Lists</span>
+<div class="absolute right-2 opacity-0 group-hover:opacity-100 bg-white border border-outline-variant px-sm py-1 rounded shadow-sm text-[9px] z-10">12Q | 3LO</div>
+</div>
+<div class="flex items-center gap-sm p-sm rounded-lg bg-primary-container/10 border-l-2 border-primary cursor-pointer group relative">
+<div class="w-2 h-2 rounded-full bg-warning"></div>
+<span class="text-body-sm font-medium text-primary truncate">Stack: ADT &amp; Apps</span>
+<div class="absolute right-2 opacity-100 bg-white border border-outline-variant px-sm py-1 rounded shadow-sm text-[9px] z-10">8Q | 3LO</div>
+</div>
+<div class="flex items-center gap-sm p-sm rounded-lg hover:bg-surface-container-low cursor-pointer group relative">
+<div class="w-2 h-2 rounded-full bg-slate-300"></div>
+<span class="text-body-sm text-secondary truncate">Queue Implementations</span>
+<div class="absolute right-2 opacity-0 group-hover:opacity-100 bg-white border border-outline-variant px-sm py-1 rounded shadow-sm text-[9px] z-10">0Q | 1LO</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- CENTER PANEL: Tabbed Workspace -->
+<div class="col-span-12 lg:col-span-6 flex flex-col gap-lg">
+<div class="bg-white border border-outline-variant rounded-xxl flex flex-col premium-shadow overflow-hidden">
+<!-- Workspace Tabs -->
+<div class="px-lg pt-lg border-b border-outline-variant flex gap-lg overflow-x-auto custom-scrollbar bg-surface-container-lowest">
+<button class="pb-md text-label-md font-bold tab-active whitespace-nowrap">Overview</button>
+<button class="pb-md text-label-md font-medium text-secondary hover:text-primary whitespace-nowrap transition-colors">Questions</button>
+<button class="pb-md text-label-md font-medium text-secondary hover:text-primary whitespace-nowrap transition-colors">Assignments</button>
+<button class="pb-md text-label-md font-medium text-secondary hover:text-primary whitespace-nowrap transition-colors">Exam Mapping</button>
+<button class="pb-md text-label-md font-medium text-secondary hover:text-primary whitespace-nowrap transition-colors">Resources</button>
+<button class="pb-md text-label-md font-medium text-secondary hover:text-primary whitespace-nowrap transition-colors">Analytics</button>
+</div>
+<!-- Tab Content: Overview -->
+<div class="p-lg">
+<div class="flex justify-between items-start mb-lg">
+<div>
+<div class="flex items-center gap-sm mb-base">
+<span class="bg-slate-100 text-slate-600 text-[10px] font-bold px-md py-[2px] rounded-full uppercase tracking-wider">Unit 2.2</span>
+<span class="bg-secondary-container text-on-secondary-container text-[10px] font-bold px-md py-[2px] rounded-full uppercase tracking-wider">Intermediate</span>
+<span class="bg-warning/10 text-warning text-[10px] font-bold px-md py-[2px] rounded-full uppercase tracking-wider">In Progress</span>
+</div>
+<h2 class="font-headline-md text-headline-md font-bold text-on-surface">Stack: ADT &amp; Applications</h2>
+</div>
+<div class="flex gap-sm">
+<button class="p-sm rounded-xl border border-outline-variant hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-secondary text-md">share</span>
+</button>
+<button class="p-sm rounded-xl bg-primary-container/10 text-primary hover:bg-primary-container/20 transition-colors">
+<span class="material-symbols-outlined text-md">edit</span>
+</button>
+</div>
+</div>
+<!-- Quick Stats Cards -->
+<div class="grid grid-cols-3 gap-md mb-lg">
+<div class="p-md bg-surface-container-low border border-outline-variant rounded-xl flex items-center gap-md">
+<div class="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-md">quiz</span>
+</div>
+<div>
+<p class="text-[10px] text-secondary font-bold uppercase">Questions</p>
+<p class="text-body-md font-bold">12 Mapped</p>
+</div>
+</div>
+<div class="p-md bg-surface-container-low border border-outline-variant rounded-xl flex items-center gap-md">
+<div class="w-10 h-10 bg-success/10 rounded-lg flex items-center justify-center text-success">
+<span class="material-symbols-outlined text-md">assignment</span>
+</div>
+<div>
+<p class="text-[10px] text-secondary font-bold uppercase">Assignments</p>
+<p class="text-body-md font-bold">03 Linked</p>
+</div>
+</div>
+<div class="p-md bg-surface-container-low border border-outline-variant rounded-xl flex items-center gap-md">
+<div class="w-10 h-10 bg-warning/10 rounded-lg flex items-center justify-center text-warning">
+<span class="material-symbols-outlined text-md">event_available</span>
+</div>
+<div>
+<p class="text-[10px] text-secondary font-bold uppercase">Exams</p>
+<p class="text-body-md font-bold">02 Active</p>
+</div>
+</div>
+</div>
+<div class="space-y-lg">
+<div>
+<h4 class="text-label-md font-bold mb-sm text-secondary uppercase tracking-tight text-[11px]">Description</h4>
+<p class="text-body-md text-on-surface-variant leading-relaxed bg-white border border-outline-variant/50 p-md rounded-xl">
+                                Detailed study of Stack Abstract Data Type, encompassing LIFO principles, internal implementation using arrays and linked lists, and real-world application mapping in compiler design and expression evaluation.
+                            </p>
+</div>
+<div>
+<h4 class="text-label-md font-bold mb-sm text-secondary uppercase tracking-tight text-[11px]">Learning Outcomes</h4>
+<div class="grid grid-cols-1 gap-sm">
+<div class="flex items-center justify-between p-sm border border-outline-variant/50 rounded-xl bg-white hover:border-primary transition-all cursor-default">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined text-success">check_circle</span>
+<span class="text-body-sm">Define Stack ADT and fundamental operations</span>
+</div>
+<span class="text-[10px] font-bold text-slate-400">CO1</span>
+</div>
+<div class="flex items-center justify-between p-sm border border-outline-variant/50 rounded-xl bg-white hover:border-primary transition-all cursor-default">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined text-success">check_circle</span>
+<span class="text-body-sm">Implement Stack using Dynamic Arrays</span>
+</div>
+<span class="text-[10px] font-bold text-slate-400">CO2</span>
+</div>
+<div class="flex items-center justify-between p-sm border border-outline-variant/30 rounded-xl bg-slate-50 opacity-70">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined text-slate-300">radio_button_unchecked</span>
+<span class="text-body-sm">Evaluate arithmetic expressions via Stack</span>
+</div>
+<span class="text-[10px] font-bold text-slate-400">CO2</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Syllabus Heatmap Section -->
+<div class="bg-white border border-outline-variant rounded-xxl p-lg premium-shadow">
+<div class="flex items-center justify-between mb-lg">
+<h4 class="font-label-md text-label-md font-bold">Subject Coverage Heatmap</h4>
+<div class="flex items-center gap-md">
+<div class="flex items-center gap-base text-[10px] font-bold text-secondary">
+<div class="w-2 h-2 rounded-full bg-success"></div> Done
+                        </div>
+<div class="flex items-center gap-base text-[10px] font-bold text-secondary">
+<div class="w-2 h-2 rounded-full bg-warning"></div> Active
+                        </div>
+<div class="flex items-center gap-base text-[10px] font-bold text-secondary">
+<div class="w-2 h-2 rounded-full bg-slate-300"></div> Pending
+                        </div>
+</div>
+</div>
+<div class="space-y-md">
+<div>
+<p class="text-[10px] font-bold text-secondary uppercase mb-sm">Unit 1: Introduction</p>
+<div class="flex flex-wrap gap-xs">
+<div class="heatmap-pill px-sm py-1 bg-success/10 text-success border border-success/20 rounded-md text-[10px] font-bold">1.1 ADT Basics</div>
+<div class="heatmap-pill px-sm py-1 bg-success/10 text-success border border-success/20 rounded-md text-[10px] font-bold">1.2 Complexity Analysis</div>
+<div class="heatmap-pill px-sm py-1 bg-success/10 text-success border border-success/20 rounded-md text-[10px] font-bold">1.3 Recursive Algorithms</div>
+</div>
+</div>
+<div>
+<p class="text-[10px] font-bold text-secondary uppercase mb-sm">Unit 2: Linear Structures</p>
+<div class="flex flex-wrap gap-xs">
+<div class="heatmap-pill px-sm py-1 bg-success/10 text-success border border-success/20 rounded-md text-[10px] font-bold">2.1 Linked Lists</div>
+<div class="heatmap-pill px-sm py-1 bg-warning/10 text-warning border border-warning/20 rounded-md text-[10px] font-bold ring-2 ring-warning/30 ring-offset-1">2.2 Stack ADT</div>
+<div class="heatmap-pill px-sm py-1 bg-slate-100 text-slate-400 border border-slate-200 rounded-md text-[10px] font-bold">2.3 Queues</div>
+<div class="heatmap-pill px-sm py-1 bg-slate-100 text-slate-400 border border-slate-200 rounded-md text-[10px] font-bold">2.4 Dequeues</div>
+</div>
+</div>
+<div>
+<p class="text-[10px] font-bold text-secondary uppercase mb-sm">Unit 3: Non-Linear</p>
+<div class="flex flex-wrap gap-xs">
+<div class="heatmap-pill px-sm py-1 bg-slate-100 text-slate-400 border border-slate-200 rounded-md text-[10px] font-bold">3.1 Binary Trees</div>
+<div class="heatmap-pill px-sm py-1 bg-slate-100 text-slate-400 border border-slate-200 rounded-md text-[10px] font-bold">3.2 AVL Trees</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- RIGHT PANEL: Insights & Actions -->
+<div class="col-span-12 lg:col-span-3 flex flex-col gap-lg">
+<!-- Recommended Next Action Card -->
+<div class="bg-gradient-to-br from-primary to-primary-container p-lg rounded-xxl text-white shadow-xl group cursor-pointer hover:scale-[1.02] transition-all">
+<div class="flex items-center gap-sm mb-md">
+<span class="material-symbols-outlined text-white/80">lightbulb</span>
+<span class="text-label-sm font-bold opacity-80 uppercase tracking-widest">Recommended Next</span>
+</div>
+<h5 class="font-bold mb-sm">Coverage Gap Detected</h5>
+<p class="text-body-sm text-white/90 mb-lg leading-snug">
+                    "Stack Applications" has low coverage for Mid-Sem 2024.
+                </p>
+<button class="w-full bg-white text-primary py-sm rounded-xl font-bold text-label-md hover:bg-primary-fixed transition-colors flex items-center justify-center gap-sm">
+<span class="material-symbols-outlined text-md">auto_fix_high</span>
+                    Generate 5 Questions
+                </button>
+</div>
+<!-- Recent Activity -->
+<div class="bg-white border border-outline-variant rounded-xxl p-md premium-shadow overflow-hidden">
+<div class="flex items-center justify-between mb-md px-sm">
+<h4 class="font-label-md text-label-md font-bold">Recent Activity</h4>
+<span class="material-symbols-outlined text-secondary text-md">history</span>
+</div>
+<div class="space-y-md">
+<div class="flex gap-md px-sm group">
+<div class="mt-1 w-2 h-2 rounded-full bg-primary flex-shrink-0"></div>
+<div>
+<p class="text-body-sm font-medium leading-tight">Generated 12 AI MCQs</p>
+<p class="text-[10px] text-secondary">Today, 2:14 PM</p>
+</div>
+</div>
+<div class="flex gap-md px-sm group">
+<div class="mt-1 w-2 h-2 rounded-full bg-success flex-shrink-0"></div>
+<div>
+<p class="text-body-sm font-medium leading-tight">Updated Course Outcomes (CO2)</p>
+<p class="text-[10px] text-secondary">Yesterday, 11:30 AM</p>
+</div>
+</div>
+<div class="flex gap-md px-sm group">
+<div class="mt-1 w-2 h-2 rounded-full bg-warning flex-shrink-0"></div>
+<div>
+<p class="text-body-sm font-medium leading-tight">Exam Map: Mid-Sem Sync</p>
+<p class="text-[10px] text-secondary">Oct 1, 4:22 PM</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Question Bank (Recommended) -->
+<div class="bg-white border border-outline-variant rounded-xxl p-md premium-shadow">
+<div class="flex items-center justify-between mb-md px-sm">
+<h4 class="font-label-md text-label-md font-bold">Top Recommendations</h4>
+<button class="text-primary text-[10px] font-bold hover:underline">View All</button>
+</div>
+<div class="space-y-sm">
+<div class="p-sm bg-surface-container-low rounded-lg border border-outline-variant/30 hover:border-primary transition-all cursor-pointer group">
+<p class="text-body-sm font-medium mb-sm line-clamp-1">Infix to Postfix Algorithm</p>
+<div class="flex items-center justify-between">
+<span class="text-[9px] bg-slate-200 px-sm py-[1px] rounded text-secondary font-bold">Hard</span>
+<button class="text-primary opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-[2px]">
+<span class="material-symbols-outlined text-sm">add</span>
+<span class="text-[10px] font-bold">Add</span>
+</button>
+</div>
+</div>
+<div class="p-sm bg-surface-container-low rounded-lg border border-outline-variant/30 hover:border-primary transition-all cursor-pointer group">
+<p class="text-body-sm font-medium mb-sm line-clamp-1">Balanced Parentheses Check</p>
+<div class="flex items-center justify-between">
+<span class="text-[9px] bg-slate-200 px-sm py-[1px] rounded text-secondary font-bold">Medium</span>
+<button class="text-primary opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-[2px]">
+<span class="material-symbols-outlined text-sm">add</span>
+<span class="text-[10px] font-bold">Add</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Quick Actions -->
+<div class="space-y-sm">
+<button class="w-full flex items-center justify-between px-md py-sm bg-white border border-outline-variant rounded-xl text-label-md font-medium hover:bg-slate-50 transition-all premium-shadow">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined text-md text-primary">auto_stories</span>
+                        Bulk Map Topics
+                    </div>
+<span class="material-symbols-outlined text-secondary">chevron_right</span>
+</button>
+<button class="w-full flex items-center justify-between px-md py-sm bg-white border border-outline-variant rounded-xl text-label-md font-medium hover:bg-slate-50 transition-all premium-shadow">
+<div class="flex items-center gap-md">
+<span class="material-symbols-outlined text-md text-success">verified</span>
+                        Verify Bloom's Levels
+                    </div>
+<span class="material-symbols-outlined text-secondary">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Floating Global Action Bar -->
+<div class="fixed bottom-lg left-1/2 -translate-x-1/2 z-50 flex items-center gap-md px-lg py-md bg-on-background/95 backdrop-blur-xl rounded-full shadow-2xl border border-white/10 text-white animate-in slide-in-from-bottom-10 duration-500">
+<div class="flex items-center gap-lg pr-lg border-r border-white/20">
+<div class="flex flex-col">
+<span class="text-[10px] font-bold opacity-50 uppercase leading-none mb-1">Status</span>
+<span class="text-label-sm font-bold flex items-center gap-sm">
+<div class="w-2 h-2 rounded-full bg-warning animate-pulse"></div>
+                    Unit 2 in Progress
+                </span>
+</div>
+<div class="flex flex-col">
+<span class="text-[10px] font-bold opacity-50 uppercase leading-none mb-1">Topics</span>
+<span class="text-label-sm font-bold">18 / 24</span>
+</div>
+</div>
+<div class="flex items-center gap-sm">
+<button class="flex items-center gap-sm px-md py-2 bg-primary hover:bg-primary-container rounded-full text-label-sm font-bold transition-all">
+<span class="material-symbols-outlined text-md">bolt</span>
+                Generate AI Questions
+            </button>
+<button class="flex items-center gap-sm px-md py-2 bg-white/10 hover:bg-white/20 rounded-full text-label-sm font-bold transition-all">
+<span class="material-symbols-outlined text-md">post_add</span>
+                Create Exam
+            </button>
+<button class="flex items-center gap-sm px-md py-2 text-success hover:bg-success/10 rounded-full text-label-sm font-bold transition-all border border-success/30">
+<span class="material-symbols-outlined text-md">task_alt</span>
+                Mark Completed
+            </button>
+</div>
+</div>
+</main>
+<script>
+    function toggleQuickActions() {
+        // Functionality for additional floating actions if needed
+    }
+
+    // Scroll effect for sticky bar visibility
+    window.addEventListener('scroll', () => {
+        // Logic for hiding/showing if user reaches bottom could be added
+    });
+</script>
+</body></html>

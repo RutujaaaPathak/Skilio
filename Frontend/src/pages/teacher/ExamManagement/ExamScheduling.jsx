@@ -353,9 +353,9 @@ export default function ExamScheduling({ page, setPage }) {
                     )}
                     <div className="border-t border-outline-variant/40 my-1.5" />
                     <div className="flex flex-wrap gap-1.5 justify-end">
-                      <button onClick={() => setPage('assignStudents', e.id)}
+                      <button onClick={() => setPage('classes')}
                         className="inline-flex items-center gap-0.5 px-2 py-1 text-xs font-bold text-secondary border border-secondary/30 rounded-md hover:bg-secondary/10 hover:border-secondary/50 active:bg-secondary/20 transition-colors">
-                        <Icon className="text-[11px]">group_add</Icon>Assign Students
+                        <Icon className="text-[11px]">group</Icon>Classes
                       </button>
                     </div>
                   </div>

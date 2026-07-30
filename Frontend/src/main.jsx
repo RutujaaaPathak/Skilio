@@ -5,7 +5,6 @@ import App from './App.jsx';
 import './index.css';
 import { AuthProvider } from './context/AuthContext.jsx';
 import { AdminProvider } from './context/AdminContext.jsx';
-import { ThemeProvider } from './context/ThemeContext.jsx';
 import { ToastProvider } from './components/Toast.jsx';
 
 createRoot(document.getElementById('root')).render(
@@ -13,11 +12,9 @@ createRoot(document.getElementById('root')).render(
     <BrowserRouter>
       <AuthProvider>
         <AdminProvider>
-          <ThemeProvider>
-            <ToastProvider>
-              <App />
-            </ToastProvider>
-          </ThemeProvider>
+          <ToastProvider>
+            <App />
+          </ToastProvider>
         </AdminProvider>
       </AuthProvider>
     </BrowserRouter>

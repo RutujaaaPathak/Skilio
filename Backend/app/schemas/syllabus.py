@@ -19,6 +19,7 @@ class SyllabusUpdate(BaseModel):
     unit: str | None = None
     description: str | None = None
     learning_outcomes: str | None = None
+    completed: bool | None = None
     is_active: bool | None = None
 
 
@@ -31,6 +32,7 @@ class SyllabusResponse(BaseModel):
     unit: str | None = None
     description: str | None = None
     learning_outcomes: str | None = None
+    completed: bool = False
     is_active: bool
     created_at: datetime
     updated_at: datetime | None = None

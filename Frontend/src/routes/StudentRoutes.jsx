@@ -16,6 +16,8 @@ const IntelligenceProfile = lazy(() => import('../pages/student/Analytics/Intell
 const StudentPerformanceAnalytics = lazy(() => import('../pages/student/Analytics/StudentPerformanceAnalytics.jsx'));
 const StudentProfile = lazy(() => import('../pages/student/Profile/StudentProfile.jsx'));
 const Settings = lazy(() => import('../pages/student/Settings/Settings.jsx'));
+const StudentClasses = lazy(() => import('../pages/student/Classes/StudentClasses.jsx'));
+const StudentClassDetail = lazy(() => import('../pages/student/Classes/StudentClassDetail.jsx'));
 
 const Guard = ({ children }) => <ProtectedRoute requiredRole="student">{children}</ProtectedRoute>;
 
@@ -45,6 +47,8 @@ export default function StudentRoutes() {
         <Route path="/analytics/performance" element={<Guard><StudentPerformanceAnalytics /></Guard>} />
         <Route path="/profile" element={<Guard><StudentProfile /></Guard>} />
         <Route path="/settings" element={<Guard><Settings /></Guard>} />
+        <Route path="/classes" element={<Guard><StudentClasses /></Guard>} />
+        <Route path="/classes/:classId" element={<Guard><StudentClassDetail /></Guard>} />
       </Routes>
     </Suspense>
   );

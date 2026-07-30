@@ -19,20 +19,24 @@ export default function Result() {
     api.get(`/students/exams/${activeExamId}/my-submission`)
       .then(res => {
         setResult(res);
+        setLoading(false);
       })
       .catch(err => {
-        console.warn("Failed to load result from backend, using mock:", err);
-        const savedAnswers = JSON.parse(localStorage.getItem('demo_answers') || '{}');
-        const total = Object.keys(savedAnswers).length || 10;
-        const correct = Math.floor(total * 0.6);
-        setResult({
-          score_percentage: 60,
-          correct_count: correct,
-          total_questions: total,
-          integrity_percentage: 100,
-        });
-      })
-      .finally(() => {
+        const msg = err?.response?.data?.detail || err?.message || '';
+        if (msg.includes('not been published')) {
+          setError('Your results have not been published yet. Please check back after your teacher releases them.');
+        } else {
+          console.warn("Failed to load result from backend, using mock:", err);
+          const savedAnswers = JSON.parse(localStorage.getItem('demo_answers') || '{}');
+          const total = Object.keys(savedAnswers).length || 10;
+          const correct = Math.floor(total * 0.6);
+          setResult({
+            score_percentage: 60,
+            correct_count: correct,
+            total_questions: total,
+            integrity_percentage: 100,
+          });
+        }
         setLoading(false);
       });
   }, []);
