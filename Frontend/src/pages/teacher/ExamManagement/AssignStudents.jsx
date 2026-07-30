@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import TeacherShell, { Icon } from '../../../components/TeacherShell.jsx'
+import { useAuth } from '../../../hooks/useAuth.js'
 import { examService } from '../../../services/examService.js'
 import { studentService } from '../../../services/studentService.js'
 
 export default function AssignStudents({ page, setPage, pageRef }) {
+  const { user } = useAuth()
   const [exams, setExams] = useState([])
   const [selectedExamId, setSelectedExamId] = useState(() => pageRef?.current?.assignStudents ?? null)
   const [students, setStudents] = useState([])
@@ -11,12 +13,12 @@ export default function AssignStudents({ page, setPage, pageRef }) {
   const [selected, setSelected] = useState(new Set())
   const [loading, setLoading] = useState(true)
   const [assigning, setAssigning] = useState(false)
-  const [filters, setFilters] = useState({ batch: '', year: '', branch: '', division: '' })
+  const [filters, setFilters] = useState({ batch: '', year: '', branch: user?.branch || '', division: '' })
 
   const fetchExams = useCallback(async () => {
     try {
       const data = await examService.list()
-      setExams(data.filter(e => e.status !== 'draft'))
+      setExams(data.filter(e => e.status !== 'draft' && e.status !== 'completed'))
     } catch { setExams([]) }
   }, [])
 
@@ -49,6 +51,12 @@ export default function AssignStudents({ page, setPage, pageRef }) {
     fetchAssigned(selectedExamId)
     setSelected(new Set())
   }, [selectedExamId, fetchAssigned])
+
+  useEffect(() => {
+    if (user?.branch && !filters.branch) {
+      setFilters(prev => ({ ...prev, branch: user.branch }))
+    }
+  }, [user?.branch])
 
   const filtered = students.filter(s => {
     if (filters.batch && s.batch !== filters.batch) return false
@@ -150,7 +158,7 @@ export default function AssignStudents({ page, setPage, pageRef }) {
               </div>
 
               {/* Filters */}
-              <div className="flex gap-sm mb-md flex-wrap">
+              <div className="flex gap-sm mb-md flex-wrap items-center">
                 {['batch', 'year', 'branch', 'division'].map(f => (
                   <select
                     key={f}
@@ -162,6 +170,12 @@ export default function AssignStudents({ page, setPage, pageRef }) {
                     {distinct(f).map(v => <option key={v} value={v}>{v}</option>)}
                   </select>
                 ))}
+                {user?.branch && filters.branch === user.branch && (
+                  <span className="text-[10px] bg-secondary-container text-secondary px-sm py-0.5 rounded-full font-bold">My Branch</span>
+                )}
+                {user?.college && (
+                  <span className="text-[10px] bg-surface-container-high text-on-surface-variant px-sm py-0.5 rounded-full">{user.college}</span>
+                )}
                 <span className="text-xs text-on-surface-variant self-center ml-auto">
                   {filtered.length} student{filtered.length !== 1 ? 's' : ''}
                 </span>

@@ -1,9 +1,12 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuth.js';
+import { useBlazeFaceTracking, convertBlazeFaceToTrackingFormat } from '../../../hooks/useBlazeFaceTracking.js';
 import Icon from '../../../components/Icon.jsx';
 import { api } from '../../../services/api.js';
 import { proctorBufferService } from '../../../services/proctorBufferService.js';
+import { GAZE_THRESHOLDS, computeGazeMetrics, smoothGazeHistory, computeBaseline, classifyGazeState } from '../../../utils/gazeEstimation.js';
+import { useObjectDetection } from '../../../hooks/useObjectDetection.js';
 
 export default function ExamInterface() {
   const navigate = useNavigate();
@@ -107,29 +110,19 @@ export default function ExamInterface() {
 
   const videoRef = useRef(null);
   const streamRef = useRef(null);
-  const trackerTaskRef = useRef(null);
   const analysisIntervalRef = useRef(null);
   
   // ── Proctoring Time Thresholds (milliseconds) ──
   const PROCTORING_THRESHOLDS = {
     NO_FACE_WARNING: 3000,
-    NO_FACE_VIOLATION: 7000,
+    NO_FACE_VIOLATION: 10000,
     MULTIPLE_FACE_WARNING: 3000,
     MULTIPLE_FACE_VIOLATION: 7000,
   };
 
-  // ── Gaze Detection Configuration ──
-  // All thresholds are normalised to [0,1] relative to video dimensions.
-  // tracking.js face rectangles are noisy, so we use only coarse position
-  // with extreme dead zones to avoid false positives.
+  // ── Smoothing & cooldown config ──
   const PROCTOR_CFG = {
     SMOOTHING_ALPHA: 0.06,
-    DEAD_ZONE_X: 0.20,
-    DEAD_ZONE_Y: 0.16,
-    THRESHOLD_X: 0.45,
-    THRESHOLD_Y: 0.35,
-    FRAMES_AWAY: 90,
-    FRAMES_BACK: 30,
     WARNING_COOLDOWN_MS: 10000,
   };
 
@@ -147,14 +140,24 @@ export default function ExamInterface() {
   const lastEventTimeRef = useRef({});  // cooldown per event type
 
   const smoothedPosRef = useRef({ x: 0.5, y: 0.5 });
-  const awayCounterRef = useRef(0);
-  const backCounterRef = useRef(0);
   const gazeAwayRef = useRef(false);
   const lastWarnRef = useRef(0);
   const gazeConfidenceRef = useRef(1.0);
   const faceLastSeenRef = useRef(Date.now());
+
+  // ── Gaze state machine refs (time-based, same pattern as face detection) ──
+  const gazeStateRef = useRef('GAZE_CENTER');
+  const gazeDeviationStartRef = useRef(0);
+  const gazeViolationLoggedRef = useRef(false);
+  const gazeHistoryRef = useRef([]);
+  const gazeBaselineRef = useRef(null);
+  const gazeCalibratingRef = useRef(true);
+  const gazeCalibrationSamplesRef = useRef([]);
+  const lastPhoneViolationRef = useRef(0);
+  const highRiskTriggeredRef = useRef(false);
   const [activeWarning, setActiveWarning] = useState(null); // { reason, count, max }
   const [faceAlert, setFaceAlert] = useState(null); // { type: 'no_face'|'multiple_faces', level: 'warning'|'violation', duration: number }
+  const [gazeAlert, setGazeAlert] = useState(null); // { direction, duration } | null
 
   // ── Proctor config derived from exam ──
   const proctorConfig = useMemo(() => {
@@ -270,6 +273,192 @@ export default function ExamInterface() {
 
 
 
+// Initialize BlazeFace face tracking (at top level, NOT inside useEffect)
+  const { stop: stopBlazeFaceTracking } = useBlazeFaceTracking({
+    videoRef,
+    enabled: proctorConfig.face,
+    onFaces: (faces, videoWidth, videoHeight) => {
+      const data = convertBlazeFaceToTrackingFormat(faces, videoWidth, videoHeight);
+      const now = Date.now();
+
+      if (data.length === 0) {
+        gazeConfidenceRef.current = Math.max(0.0, gazeConfidenceRef.current - 0.02);
+        multiFaceStartRef.current = 0;
+        multiFaceStateRef.current = 'NORMAL';
+        multiFaceViolationLoggedRef.current = false;
+
+        if (noFaceStateRef.current === 'NORMAL') {
+          noFaceStartRef.current = now;
+          noFaceStateRef.current = 'NO_FACE_PENDING';
+          noFaceViolationLoggedRef.current = false;
+        }
+
+        const duration = now - noFaceStartRef.current;
+
+        if (duration >= PROCTORING_THRESHOLDS.NO_FACE_VIOLATION) {
+          noFaceStateRef.current = 'NO_FACE_VIOLATION';
+          setProctorStatus(prev => ({ ...prev, faceVisible: false, faceCount: 0 }));
+          if (!noFaceViolationLoggedRef.current) {
+            noFaceViolationLoggedRef.current = true;
+            const conf = Math.round(gazeConfidenceRef.current * 10) / 10;
+            const durSec = parseFloat((duration / 1000).toFixed(1));
+            triggerViolation("Face not detected for extended period.", "no_face_detected", 0.5 + conf * 0.4, `Face not detected for ${durSec} seconds`);
+            setFaceAlert({ type: 'no_face', level: 'violation', duration: durSec });
+          }
+        } else if (duration >= PROCTORING_THRESHOLDS.NO_FACE_WARNING) {
+          noFaceStateRef.current = 'NO_FACE_WARNING';
+          setProctorStatus(prev => ({ ...prev, faceVisible: false, faceCount: 0 }));
+          const durSec = parseFloat((duration / 1000).toFixed(1));
+          setFaceAlert({ type: 'no_face', level: 'warning', duration: durSec });
+        } else {
+          setProctorStatus(prev => ({ ...prev, faceVisible: true, faceCount: 0 }));
+          setFaceAlert(null);
+        }
+
+        lookingAwayTimerRef.current = 0;
+
+      } else if (data.length > 1) {
+        noFaceStartRef.current = 0;
+        noFaceStateRef.current = 'NORMAL';
+        noFaceViolationLoggedRef.current = false;
+
+        if (multiFaceStateRef.current === 'NORMAL') {
+          multiFaceStartRef.current = now;
+          multiFaceStateRef.current = 'MULTI_FACE_PENDING';
+          multiFaceViolationLoggedRef.current = false;
+        }
+
+        const duration = now - multiFaceStartRef.current;
+
+        if (duration >= PROCTORING_THRESHOLDS.MULTIPLE_FACE_VIOLATION) {
+          multiFaceStateRef.current = 'MULTI_FACE_VIOLATION';
+          setProctorStatus(prev => ({ ...prev, faceCount: data.length }));
+          if (!multiFaceViolationLoggedRef.current) {
+            multiFaceViolationLoggedRef.current = true;
+            const durSec = parseFloat((duration / 1000).toFixed(1));
+            triggerViolation("Multiple faces detected inside camera frame.", "multiple_faces_detected", 0.9, `Multiple faces detected for ${durSec} seconds`);
+            setFaceAlert({ type: 'multiple_faces', level: 'violation', duration: durSec });
+          }
+        } else if (duration >= PROCTORING_THRESHOLDS.MULTIPLE_FACE_WARNING) {
+          multiFaceStateRef.current = 'MULTI_FACE_WARNING';
+          const durSec = parseFloat((duration / 1000).toFixed(1));
+          setFaceAlert({ type: 'multiple_faces', level: 'warning', duration: durSec });
+        }
+
+        lookingAwayTimerRef.current = 0;
+
+      } else {
+        noFaceStartRef.current = 0;
+        noFaceStateRef.current = 'NORMAL';
+        noFaceViolationLoggedRef.current = false;
+        multiFaceStartRef.current = 0;
+        multiFaceStateRef.current = 'NORMAL';
+        multiFaceViolationLoggedRef.current = false;
+        setFaceAlert(null);
+
+        faceLastSeenRef.current = now;
+        gazeConfidenceRef.current = Math.min(1.0, gazeConfidenceRef.current + 0.05);
+        setProctorStatus(prev => ({ ...prev, faceVisible: true, faceCount: 1 }));
+
+        const rect = data[0];
+        const vw = videoWidth || 320;
+        const vh = videoHeight || 240;
+
+        const faceCx = (rect.x + rect.width / 2) / vw;
+        const faceCy = (rect.y + rect.height / 2) / vh;
+
+        const a = PROCTOR_CFG.SMOOTHING_ALPHA;
+        const p = smoothedPosRef.current;
+        const sx = p.x + a * (faceCx - p.x);
+        const sy = p.y + a * (faceCy - p.y);
+        smoothedPosRef.current = { x: sx, y: sy };
+
+        // ── Gaze estimation using BlazeFace landmarks ──
+        const landmarks = rect.landmarks;
+        const metrics = computeGazeMetrics(
+          landmarks,
+          { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+          vw, vh
+        );
+
+        // Auto-calibration: collect baseline samples at the start
+        if (gazeCalibratingRef.current) {
+          gazeCalibrationSamplesRef.current.push(metrics);
+          if (gazeCalibrationSamplesRef.current.length >= GAZE_THRESHOLDS.CALIBRATION_FRAMES) {
+            gazeBaselineRef.current = computeBaseline(gazeCalibrationSamplesRef.current);
+            gazeCalibratingRef.current = false;
+          }
+        }
+
+        // Rolling history for temporal smoothing
+        gazeHistoryRef.current.push(metrics);
+        if (gazeHistoryRef.current.length > GAZE_THRESHOLDS.SMOOTHING_WINDOW) {
+          gazeHistoryRef.current.shift();
+        }
+
+        const smoothed = smoothGazeHistory(gazeHistoryRef.current);
+        const gazeResult = classifyGazeState(smoothed, gazeBaselineRef.current);
+
+        // ── Gaze state machine (time-based, same pattern as face detection) ──
+        if (gazeResult.state === 'GAZE_CENTER') {
+          gazeDeviationStartRef.current = 0;
+          gazeStateRef.current = 'GAZE_CENTER';
+          gazeViolationLoggedRef.current = false;
+          setGazeAlert(null);
+          if (gazeAwayRef.current) {
+            gazeAwayRef.current = false;
+            setProctorStatus(prev => ({ ...prev, gazeOk: true }));
+          }
+        } else if (gazeResult.state === 'GAZE_SLIGHT_DEVIATION' || gazeResult.state === 'GAZE_UNKNOWN') {
+          gazeDeviationStartRef.current = 0;
+          gazeStateRef.current = gazeResult.state;
+          setGazeAlert(null);
+        } else {
+          if (gazeDeviationStartRef.current === 0) {
+            gazeDeviationStartRef.current = now;
+            gazeStateRef.current = 'GAZE_PENDING';
+            gazeViolationLoggedRef.current = false;
+          }
+
+          const duration = now - gazeDeviationStartRef.current;
+          const durSec = parseFloat((duration / 1000).toFixed(1));
+
+          if (duration >= GAZE_THRESHOLDS.VIOLATION_DURATION) {
+            gazeStateRef.current = 'GAZE_VIOLATION';
+            gazeAwayRef.current = true;
+            setProctorStatus(prev => ({ ...prev, gazeOk: false }));
+            setGazeAlert({ direction: gazeResult.direction, duration: durSec, level: 'violation' });
+            if (!gazeViolationLoggedRef.current) {
+              gazeViolationLoggedRef.current = true;
+              logProctorViolation("looking_away", 0.65, { duration_seconds: durSec, direction: gazeResult.direction }, `Gaze ${gazeResult.direction} for ${durSec}s`);
+              addLogEntry(`[Proctoring] Gaze deviation (${gazeResult.direction}) for ${durSec}s`, 'warning');
+            }
+          } else if (duration >= GAZE_THRESHOLDS.WARNING_DURATION) {
+            gazeStateRef.current = 'GAZE_WARNING';
+            gazeAwayRef.current = true;
+            setProctorStatus(prev => ({ ...prev, gazeOk: false }));
+            setGazeAlert({ direction: gazeResult.direction, duration: durSec, level: 'warning' });
+          }
+        }
+      }
+    },
+  });
+
+  // Initialize COCO-SSD object detection for phone detection
+  const { prohibitedObjects } = useObjectDetection(videoRef);
+
+  // Phone detection: trigger violation when a cell phone is visible in the camera
+  useEffect(() => {
+    if (!proctorConfig.phone) return;
+    if (prohibitedObjects.includes('cell phone')) {
+      const now = Date.now();
+      if (now - lastPhoneViolationRef.current >= 10000) {
+        lastPhoneViolationRef.current = now;
+        triggerViolation("Mobile phone detected inside proctor frame!", "phone_detected", 0.95);
+      }
+    }
+  }, [prohibitedObjects, proctorConfig.phone]);
+
   // Request camera and setup tracking
   useEffect(() => {
     if (!exam) return;
@@ -281,211 +470,29 @@ export default function ExamInterface() {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
-
-        // Initialize tracking.js if loaded
-        if (window.tracking) {
-          const startTracking = () => {
-            if (!videoRef.current || !window.tracking) return;
-            const tracker = new window.tracking.ObjectTracker('face');
-            tracker.setInitialScale(1.6);
-            tracker.setStepSize(1.7);
-            tracker.setEdgesDensity(0.05);
-
-            tracker.on('track', event => {
-              const data = event.data;
-              const now = Date.now();
-
-              if (data.length === 0) {
-                // ── No face: time-based continuous duration state machine ──
-                gazeConfidenceRef.current = Math.max(0.0, gazeConfidenceRef.current - 0.02);
-
-                // Reset multi-face state
-                multiFaceStartRef.current = 0;
-                multiFaceStateRef.current = 'NORMAL';
-                multiFaceViolationLoggedRef.current = false;
-
-                // Start timer on first no-face frame
-                if (noFaceStateRef.current === 'NORMAL') {
-                  noFaceStartRef.current = now;
-                  noFaceStateRef.current = 'NO_FACE_PENDING';
-                  noFaceViolationLoggedRef.current = false;
-                }
-
-                const duration = now - noFaceStartRef.current;
-
-                if (duration >= PROCTORING_THRESHOLDS.NO_FACE_VIOLATION) {
-                  noFaceStateRef.current = 'NO_FACE_VIOLATION';
-                  setProctorStatus(prev => ({ ...prev, faceVisible: false, faceCount: 0 }));
-                  if (!noFaceViolationLoggedRef.current) {
-                    noFaceViolationLoggedRef.current = true;
-                    const conf = Math.round(gazeConfidenceRef.current * 10) / 10;
-                    const durSec = parseFloat((duration / 1000).toFixed(1));
-                    logProctorViolation("no_face_detected", 0.5 + conf * 0.4, { duration_seconds: durSec }, `Face not detected for ${durSec} seconds`);
-                    addLogEntry(`[Proctoring] Face not detected for ${durSec}s`, 'error');
-                    setFaceAlert({ type: 'no_face', level: 'violation', duration: durSec });
-                  }
-                } else if (duration >= PROCTORING_THRESHOLDS.NO_FACE_WARNING) {
-                  noFaceStateRef.current = 'NO_FACE_WARNING';
-                  setProctorStatus(prev => ({ ...prev, faceVisible: false, faceCount: 0 }));
-                  const durSec = parseFloat((duration / 1000).toFixed(1));
-                  setFaceAlert({ type: 'no_face', level: 'warning', duration: durSec });
-                } else {
-                  // PENDING — ignore, keep normal appearance
-                  setProctorStatus(prev => ({ ...prev, faceVisible: true, faceCount: 0 }));
-                  setFaceAlert(null);
-                }
-
-                lookingAwayTimerRef.current = 0;
-
-              } else if (data.length > 1) {
-                // ── Multiple faces: time-based continuous duration state machine ──
-                // Reset no-face state
-                noFaceStartRef.current = 0;
-                noFaceStateRef.current = 'NORMAL';
-                noFaceViolationLoggedRef.current = false;
-
-                // Start timer on first multi-face frame
-                if (multiFaceStateRef.current === 'NORMAL') {
-                  multiFaceStartRef.current = now;
-                  multiFaceStateRef.current = 'MULTI_FACE_PENDING';
-                  multiFaceViolationLoggedRef.current = false;
-                }
-
-                const duration = now - multiFaceStartRef.current;
-
-                if (duration >= PROCTORING_THRESHOLDS.MULTIPLE_FACE_VIOLATION) {
-                  multiFaceStateRef.current = 'MULTI_FACE_VIOLATION';
-                  setProctorStatus(prev => ({ ...prev, faceCount: data.length }));
-                  if (!multiFaceViolationLoggedRef.current) {
-                    multiFaceViolationLoggedRef.current = true;
-                    const durSec = parseFloat((duration / 1000).toFixed(1));
-                    logProctorViolation("multiple_faces_detected", 0.9, { duration_seconds: durSec, face_count: data.length }, `Multiple faces detected for ${durSec} seconds`);
-                    addLogEntry(`[Proctoring] Multiple faces detected for ${durSec}s`, 'error');
-                    setFaceAlert({ type: 'multiple_faces', level: 'violation', duration: durSec });
-                  }
-                } else if (duration >= PROCTORING_THRESHOLDS.MULTIPLE_FACE_WARNING) {
-                  multiFaceStateRef.current = 'MULTI_FACE_WARNING';
-                  const durSec = parseFloat((duration / 1000).toFixed(1));
-                  setFaceAlert({ type: 'multiple_faces', level: 'warning', duration: durSec });
-                }
-
-                lookingAwayTimerRef.current = 0;
-
-              } else {
-                // ── Exactly 1 face — reset all face states, boost confidence ──
-                noFaceStartRef.current = 0;
-                noFaceStateRef.current = 'NORMAL';
-                noFaceViolationLoggedRef.current = false;
-                multiFaceStartRef.current = 0;
-                multiFaceStateRef.current = 'NORMAL';
-                multiFaceViolationLoggedRef.current = false;
-                setFaceAlert(null);
-
-                faceLastSeenRef.current = now;
-                gazeConfidenceRef.current = Math.min(1.0, gazeConfidenceRef.current + 0.05);
-                setProctorStatus(prev => ({ ...prev, faceVisible: true, faceCount: 1 }));
-
-                const rect = data[0];
-                const vw = videoRef.current?.videoWidth || 320;
-                const vh = videoRef.current?.videoHeight || 240;
-
-                const faceCx = (rect.x + rect.width / 2) / vw;
-                const faceCy = (rect.y + rect.height / 2) / vh;
-
-                const a = PROCTOR_CFG.SMOOTHING_ALPHA;
-                const p = smoothedPosRef.current;
-                const sx = p.x + a * (faceCx - p.x);
-                const sy = p.y + a * (faceCy - p.y);
-                smoothedPosRef.current = { x: sx, y: sy };
-
-                const ox = sx - 0.5;
-                const oy = sy - 0.5;
-
-                const dzx = PROCTOR_CFG.DEAD_ZONE_X;
-                const dzy = PROCTOR_CFG.DEAD_ZONE_Y;
-                const tx  = PROCTOR_CFG.THRESHOLD_X;
-                const ty  = PROCTOR_CFG.THRESHOLD_Y;
-
-                const awayX = Math.abs(ox) > dzx && Math.abs(ox) > tx;
-                const awayY = Math.abs(oy) > dzy && Math.abs(oy) > ty;
-                const lookingAway = awayX || awayY;
-
-                if (lookingAway) {
-                  backCounterRef.current = 0;
-                  awayCounterRef.current += 1;
-                } else {
-                  awayCounterRef.current = 0;
-                  backCounterRef.current += 1;
-                }
-
-                if (awayCounterRef.current >= PROCTOR_CFG.FRAMES_AWAY && !gazeAwayRef.current) {
-                  gazeAwayRef.current = true;
-                  setProctorStatus(prev => ({ ...prev, gazeOk: false }));
-                  const now = Date.now();
-                  if (now - lastWarnRef.current >= PROCTOR_CFG.WARNING_COOLDOWN_MS) {
-                    lastWarnRef.current = now;
-                    triggerViolation("Please look directly at the exam screen.", "looking_away", 0.65);
-                  }
-                }
-
-                if (backCounterRef.current >= PROCTOR_CFG.FRAMES_BACK && gazeAwayRef.current) {
-                  gazeAwayRef.current = false;
-                  setProctorStatus(prev => ({ ...prev, gazeOk: true }));
-                }
-
-                // eslint-disable-next-line no-constant-condition
-                if (false) {
-                  console.debug(
-                    `[GAZE] raw=(${faceCx.toFixed(3)},${faceCy.toFixed(3)})`,
-                    `sm=(${sx.toFixed(3)},${sy.toFixed(3)})`,
-                    `away=${awayCounterRef.current}`,
-                    `back=${backCounterRef.current}`,
-                    `state=${gazeAwayRef.current ? 'AWAY' : 'OK'}`,
-                  );
-                }
-              }
-            });
-
-            trackerTaskRef.current = window.tracking.track(videoRef.current, tracker);
-          };
-
-          const videoEl = videoRef.current;
-          if (videoEl) {
-            if (videoEl.readyState >= 2 && videoEl.videoWidth > 0) {
-              startTracking();
-            } else {
-              videoEl.onloadedmetadata = () => {
-                startTracking();
-              };
-            }
-          }
-        }
       })
       .catch(err => {
         console.error("Camera access blocked inside interface:", err);
         setCameraStatus('permission_denied');
         setProctorStatus(prev => ({ ...prev, cameraOk: false }));
-        // Log immediately (if enabled)
         if (isEventEnabled('camera_blocked')) {
           logProctorViolation("camera_blocked", 1.0, { error: err.name || err.message });
         }
       });
 
-    // Start periodic Vision AI screenshots check (every 20 seconds) — only if any AI monitoring is active
-  const cleanupWebcam = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
-    }
-    if (trackerTaskRef.current) {
-      trackerTaskRef.current.stop();
-      trackerTaskRef.current = null;
-    }
-    if (analysisIntervalRef.current) {
-      clearInterval(analysisIntervalRef.current);
-      analysisIntervalRef.current = null;
-    }
-  };
+    const cleanupWebcam = () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+      }
+      if (stopBlazeFaceTracking) {
+        stopBlazeFaceTracking();
+      }
+      if (analysisIntervalRef.current) {
+        clearInterval(analysisIntervalRef.current);
+        analysisIntervalRef.current = null;
+      }
+    };
 
     const anyAiEnabled = proctorConfig.face || proctorConfig.multiPerson || proctorConfig.phone;
     if (anyAiEnabled) {
@@ -637,10 +644,15 @@ export default function ExamInterface() {
     };
   }, [warningCount, proctorConfig]);
 
-  // Check auto-submit thresholds (only for non-warning-based triggers like gaze)
+  // When risk score exceeds 80, add a violation strike (once per crossing)
   useEffect(() => {
-    if (riskScore >= 75.0) {
-      autoSubmitExam();
+    if (riskScore >= 80.0) {
+      if (!highRiskTriggeredRef.current) {
+        highRiskTriggeredRef.current = true;
+        triggerViolation("Risk score exceeded 80%.", "high_risk", 1.0, "Auto-triggered violation due to high risk score");
+      }
+    } else if (riskScore < 50.0) {
+      highRiskTriggeredRef.current = false;
     }
   }, [riskScore]);
 
@@ -664,13 +676,23 @@ export default function ExamInterface() {
     warningCountRef.current += 1;
     const newCount = warningCountRef.current;
     setWarningCount(newCount);
-    addLogEntry(`[Violation] ${userMessage} (${newCount}/3)`, 'error');
+    addLogEntry(`[Violation] ${userMessage} (${newCount}/5)`, 'error');
 
-    // Persist to localStorage so count survives page refresh
     localStorage.setItem('exam_warning_count', String(newCount));
 
-    // Post to database
     logProctorViolation(eventType, confidence, { warning_number: newCount }, description || userMessage);
+
+    if (newCount >= 5) {
+      setActiveWarning({ reason: userMessage, count: newCount, max: 5, type: 'violation' });
+      setTimeout(() => {
+        setActiveWarning(null);
+        cleanupWebcam();
+        navigate('/student/exams/submission?auto=true');
+      }, 2000);
+    } else {
+      setActiveWarning({ reason: userMessage, count: newCount, max: 5, type: 'violation' });
+      setTimeout(() => setActiveWarning(null), 3000);
+    }
   };
 
   // ── Security violation handler: warning-based (tab, esc, fullscreen) ──
@@ -678,35 +700,19 @@ export default function ExamInterface() {
     if (isOnCooldown(eventType)) return;
     if (!isEventEnabled(eventType)) return;
 
-    const newCount = warningCountRef.current + 1;
-    warningCountRef.current = newCount;
-    setWarningCount(newCount);
-    localStorage.setItem('exam_warning_count', String(newCount));
-    addLogEntry(`[SECURITY] ${reason} (${newCount}/3)`, 'error');
+    const newRisk = Math.min(100, riskScore + 5);
+    setRiskScore(newRisk);
+    addLogEntry(`[Security] ${reason} (risk: ${newRisk}%)`, 'warning');
 
-    // Show the warning modal
-    setActiveWarning({ reason, count: newCount, max: 3 });
+    setActiveWarning({ reason, risk: newRisk, type: 'warning' });
+    setTimeout(() => setActiveWarning(null), 3000);
 
-    // Post proctor event (not forced submit unless it's the 3rd)
-    logProctorViolation(eventType, 1.0, { warning_number: newCount }, reason);
-
-    // After a moment, clear the modal if not on 3rd violation
-    if (newCount < 3) {
-      setTimeout(() => setActiveWarning(null), 3000);
-      // Try re-entering fullscreen if applicable
-      if (!isCurrentlyFullscreen()) {
-        const elem = document.documentElement || document.body;
-        if (elem.requestFullscreen) elem.requestFullscreen().catch(() => {});
-      }
-    } else {
-      // 3rd violation → auto-submit
-      setTimeout(() => {
-        setActiveWarning(null);
-        logProctorViolation(eventType, 1.0, { forced_submit: true, reason, warning_number: 3 }, reason);
-        cleanupWebcam();
-        navigate('/student/exams/submission?auto=true');
-      }, 2000);
+    if (!isCurrentlyFullscreen()) {
+      const elem = document.documentElement || document.body;
+      if (elem.requestFullscreen) elem.requestFullscreen().catch(() => {});
     }
+
+    logProctorViolation(eventType, 0.6, { risk_score: newRisk }, reason);
   };
 
   const logProctorViolation = async (eventType, confidence, metadata = {}, description = null) => {
@@ -974,40 +980,44 @@ export default function ExamInterface() {
       {/* Warning Modal */}
       {activeWarning && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-surface-container-lowest rounded-3xl border border-outline-variant p-lg max-w-sm w-full mx-md shadow-2xl text-center space-y-md">
+          <div className="bg-surface-container-lowest rounded-3xl border border-outline-variant p-lg max-w-lg w-full mx-md shadow-2xl text-center space-y-md">
             <div className="w-14 h-14 mx-auto rounded-full bg-error/20 flex items-center justify-center">
-              <Icon name={activeWarning.count >= 3 ? 'gavel' : 'warning'} className="text-error text-[32px]" fill />
+              <Icon name={activeWarning.type === 'violation' && activeWarning.count >= 5 ? 'gavel' : 'warning'} className="text-error text-[32px]" fill />
             </div>
             <div>
               <h2 className="text-headline-sm font-bold text-error">
-                {activeWarning.count >= 3 ? 'Exam Auto-Submitted' : 'Security Warning'}
+                {activeWarning.type === 'violation'
+                  ? (activeWarning.count >= 5 ? 'Exam Auto-Submitted' : 'Security Violation')
+                  : 'Security Warning'}
               </h2>
               <p className="text-on-surface-variant text-sm mt-xs">{activeWarning.reason}</p>
             </div>
-            <div className="flex items-center justify-center gap-xs">
-              {[1, 2, 3].map(i => (
-                <div
-                  key={i}
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-label-md font-bold border-2 transition-all ${
-                    i <= activeWarning.count
-                      ? 'bg-error text-white border-error'
-                      : 'bg-surface-container-high text-on-surface-variant border-outline-variant'
-                  }`}
-                >
-                  {i}
+            {activeWarning.type === 'violation' ? (
+              <>
+                <div className="flex items-center justify-center gap-xs">
+                  {[1, 2, 3, 4, 5].map(i => (
+                    <div
+                      key={i}
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-label-md font-bold border-2 transition-all ${
+                        i <= activeWarning.count
+                          ? 'bg-error text-white border-error'
+                          : 'bg-surface-container-high text-on-surface-variant border-outline-variant'
+                      }`}
+                    >
+                      {i}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <p className="text-label-sm text-on-surface-variant">
-              {activeWarning.count >= 3
-                ? 'Maximum warnings reached. The exam has been submitted.'
-                : `Warning ${activeWarning.count} of ${activeWarning.max}. ${activeWarning.max - activeWarning.count} more before auto-submit.`}
-            </p>
-            {activeWarning.count < 3 && (
-              <div className="flex items-center justify-center gap-xs text-label-sm text-primary">
-                <Icon name="fullscreen" className="text-base" />
-                <span>Returning to fullscreen...</span>
-              </div>
+                <p className="text-label-sm text-on-surface-variant">
+                  {activeWarning.count >= 5
+                    ? 'Maximum violations reached. The exam has been submitted.'
+                    : `Violation ${activeWarning.count} of ${activeWarning.max}. ${activeWarning.max - activeWarning.count} more before auto-submit.`}
+                </p>
+              </>
+            ) : (
+              <p className="text-label-sm text-on-surface-variant">
+                Risk score: {activeWarning.risk}%. Keep risk below 80% to avoid auto-submit.
+              </p>
             )}
           </div>
         </div>
@@ -1044,7 +1054,7 @@ export default function ExamInterface() {
                   : 'bg-tertiary-fixed text-on-tertiary border-transparent'
           }`}>
             <Icon name="warning" className="text-sm" fill />
-            <span className="text-label-sm tracking-wider">{warningCount}/3</span>
+            <span className="text-label-sm tracking-wider">{warningCount}/5</span>
           </div>
           <div className="flex items-center gap-sm bg-surface-container-low px-md py-xs rounded-lg border border-outline-variant">
             <div className="flex flex-col items-end">
@@ -1197,6 +1207,28 @@ export default function ExamInterface() {
                     : (faceAlert.level === 'violation'
                         ? `Multiple faces detected for ${faceAlert.duration}s`
                         : '⚠️ Multiple faces detected. Please ensure you are alone in the camera frame.')}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Non-blocking Gaze Alert Banner */}
+          {gazeAlert && (
+            <div className={`rounded-xl border p-md text-sm font-medium ${
+              gazeAlert.level === 'violation'
+                ? 'bg-error/10 border-error/30 text-error'
+                : 'bg-warning/10 border-warning/30 text-warning'
+            }`}>
+              <div className="flex items-center gap-xs">
+                <Icon
+                  name={gazeAlert.level === 'violation' ? 'gavel' : 'warning'}
+                  className="text-base"
+                  fill
+                />
+                <span className="font-bold text-label-sm">
+                  {gazeAlert.level === 'violation'
+                    ? `Please look at the exam screen. (${gazeAlert.duration}s)`
+                    : `⚠️ Please look at the exam screen.`}
                 </span>
               </div>
             </div>

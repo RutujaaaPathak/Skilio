@@ -23,10 +23,10 @@ def list_announcements(
             | (Announcement.institution == current_user.college)
         )
 
-    if current_user.department:
+    if current_user.branch:
         q = q.filter(
             (Announcement.department.is_(None))
-            | (Announcement.department == current_user.department)
+            | (Announcement.department == current_user.branch)
         )
 
     return q.order_by(Announcement.created_at.desc()).limit(10).all()

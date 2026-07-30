@@ -121,7 +121,11 @@ def generate_equivalent_questions(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_teacher_or_admin),
 ):
-    questions = QuestionService.generate_equivalent(db, body.question_id, current_user, body.count)
+    if body.question_id:
+        questions = QuestionService.generate_equivalent(db, body.question_id, current_user, body.count)
+    else:
+        data = {k: v for k, v in body.model_dump(exclude={"question_id", "count"}).items() if v is not None}
+        questions = QuestionService.generate_equivalent_from_data(data, body.count)
     return {"questions": questions}
 
 

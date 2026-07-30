@@ -15,6 +15,10 @@ export function useSecurityMonitor({ onProceed }) {
   const hardware = useHardwareVerification();
   const screen = useScreenIntegrity();
 
+  useEffect(() => {
+    screen.requestFullscreen();
+  }, []);
+
   const [allVerified, setAllVerified] = useState(false);
   const [overallScore, setOverallScore] = useState(0);
   const [riskLevel, setRiskLevel] = useState('High');

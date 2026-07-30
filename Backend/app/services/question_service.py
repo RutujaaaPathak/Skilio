@@ -797,6 +797,63 @@ Valid JSON only, no markdown, no code fences."""
         return questions[:count]
 
     @staticmethod
+    def generate_equivalent_from_data(data: dict, count: int = 1) -> list[dict]:
+        client = QuestionService._get_ai_client()
+        model = QuestionService._get_ai_model()
+
+        options_str = ""
+        if data.get("question_type") == "mcq" and data.get("options"):
+            opts = data["options"]
+            if isinstance(opts, list):
+                options_str = "\n".join(f"  {chr(65+i)}. {o}" for i, o in enumerate(opts))
+
+        prompt = prompt_generate_equivalent(
+            count=count,
+            subject=data.get("subject", ""),
+            topic=data.get("topic", ""),
+            difficulty=data.get("difficulty", "medium"),
+            marks=data.get("marks", 1),
+            question_type=data.get("question_type", "mcq"),
+            question_text=data.get("question_text", ""),
+            options_str=options_str,
+            correct_answer=data.get("correct_answer", ""),
+            explanation=data.get("explanation"),
+            blooms_level=data.get("blooms_level"),
+        )
+
+        kwargs = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": "You are a teacher creating equivalent exam questions. Return only valid JSON."},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.8,
+        }
+        use_openai = bool(settings.OPENAI_API_KEY) and not settings.GROQ_API_KEY
+        if use_openai:
+            kwargs["response_format"] = {"type": "json_object"}
+
+        try:
+            response = client.chat.completions.create(**kwargs)
+        except Exception:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="AI generation failed. Please try again later.")
+
+        raw = response.choices[0].message.content
+        try:
+            parsed = json.loads(raw)
+            questions = parsed if isinstance(parsed, list) else parsed.get("questions", [])
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="AI returned invalid JSON")
+        if not questions:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="AI returned no questions")
+        for q in questions:
+            q.setdefault("marks", data.get("marks", 1))
+            q.setdefault("explanation", None)
+            q.setdefault("options", None)
+            q.setdefault("blooms_level", data.get("blooms_level"))
+        return questions[:count]
+
+    @staticmethod
     def check_duplicates(db: Session, user: User, question_texts: list[str]) -> dict:
         from sqlalchemy import func
         results = []

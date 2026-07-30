@@ -38,6 +38,8 @@ def list_students(
     current_user: User = Depends(require_teacher_or_admin),
 ):
     q = db.query(User).filter(User.role == "student")
+    if current_user.role == "teacher" and current_user.institution_id:
+        q = q.filter(User.institution_id == current_user.institution_id)
     if batch:
         q = q.filter(User.batch == batch)
     if year:
