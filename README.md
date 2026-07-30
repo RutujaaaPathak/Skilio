@@ -36,10 +36,13 @@ Skilio aims to solve these challenges through intelligent assessment and verific
 
 ### AI-Powered Proctoring
 
-* Webcam monitoring
-* Face detection
+* Webcam monitoring (BlazeFace face detection)
+* Gaze estimation & head-pose tracking
+* Phone / second-device detection
+* Multiple person detection
+* Voice & screen monitoring
 * Suspicious behavior analysis
-* Automated flag generation
+* Automated flag generation & violation scoring
 
 ### Second Device Detection
 
@@ -71,6 +74,28 @@ Skilio aims to solve these challenges through intelligent assessment and verific
 
 * Creates skill-based performance profiles.
 * Provides insights beyond traditional marks and grades.
+
+### Class Management System
+
+* Teachers create classes with unique 6-character codes.
+* Students join classes using the code.
+* Assign exams to entire classes at once.
+* Future members auto-receive assigned exams.
+
+### Evaluation & Reports
+
+* Teacher evaluation dashboard with submission queue.
+* Per-question marking workspace with AI-suggested marks.
+* Final review with analytics (score distribution, topic/difficulty/Bloom's analysis).
+* Publish results workflow — students see results only after publishing.
+* Comprehensive reports with CSV export.
+
+### Syllabus Management
+
+* Organize topics by subject, unit, and chapter.
+* Mark topics as completed manually.
+* Subject coverage heatmap with per-unit progress tracking.
+* Learning outcomes management.
 
 ### Teacher Control Room
 
@@ -106,25 +131,29 @@ Teacher Control Room & Analytics Dashboard
 ### Frontend
 
 * React.js
-* TypeScript
-* Tailwind CSS
+* JavaScript (JSX)
+* Tailwind CSS v4
+* Vite
 
 ### Backend
 
+* Python 3.12
 * FastAPI
-* Python
+* SQLAlchemy ORM
+* Pydantic v2
 
 ### Database
 
-* PostgreSQL
-* MongoDB
+* SQLite (development) / PostgreSQL (production)
 
 ### AI & ML
 
-* Large Language Models (LLMs)
-* Speech-to-Text Models
-* Behavioral Analytics Models
-* Proctoring Algorithms
+* OpenAI / LLM integration (AI question generation, equivalent variants)
+* AI-suggested evaluation marks with confidence scoring
+* Behavioral analytics models
+* BlazeFace face detection (TensorFlow.js)
+* Gaze estimation algorithms
+* Proctoring algorithms
 
 ### Deployment
 
