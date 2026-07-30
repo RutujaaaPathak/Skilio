@@ -35,6 +35,7 @@ from app.routes import (
     profile_router,
     proctor_router,
     questions_router,
+    security_router,
     students_router,
     syllabus_router,
     teacher_proctor_router,
@@ -125,6 +126,7 @@ app.include_router(notifications_router, prefix="/api")
 app.include_router(achievements_router, prefix="/api")
 app.include_router(webauthn_router, prefix="/api")
 app.include_router(syllabus_router, prefix="/api")
+app.include_router(security_router, prefix="/api")
 
 
 if settings.ENABLE_METRICS:

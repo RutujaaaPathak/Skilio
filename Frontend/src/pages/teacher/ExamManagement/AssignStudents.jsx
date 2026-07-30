@@ -23,8 +23,13 @@ export default function AssignStudents({ page, setPage, pageRef }) {
   const fetchStudents = useCallback(async () => {
     try {
       const data = await studentService.list()
-      setStudents(data)
-    } catch { setStudents([]) }
+      console.log('Fetched students:', data?.length ?? 'no data', data)
+      if (data && !Array.isArray(data)) {
+        const extracted = data.students || data.data || data.users || Object.values(data).find(v => Array.isArray(v))
+        if (extracted) { setStudents(extracted); return }
+      }
+      setStudents(Array.isArray(data) ? data : [])
+    } catch (err) { console.error('Failed to fetch students:', err); setStudents([]) }
   }, [])
 
   const fetchAssigned = useCallback(async (examId) => {
@@ -74,10 +79,10 @@ export default function AssignStudents({ page, setPage, pageRef }) {
 
   const handleRemove = async (studentId) => {
     if (!selectedExamId) return
-    const assignment = await examService.getAssignedStudents(selectedExamId)
-    const a = assignment.find(a => a.student_id === studentId)
-    if (!a) return
     try {
+      const assignment = await examService.getAssignedStudents(selectedExamId)
+      const a = assignment.find(a => a.student_id === studentId)
+      if (!a) return
       await examService.removeAssignment(a.id)
       await fetchAssigned(selectedExamId)
     } catch (e) { alert('Failed to remove: ' + e.message) }

@@ -15,6 +15,7 @@ from app.routes.webauthn_routes import router as webauthn_router
 from app.routes.notifications import router as notifications_router
 from app.routes.syllabus import router as syllabus_router
 from app.routes.achievements import router as achievements_router
+from app.routes.security import router as security_router
 
-__all__ = ["admin_router", "auth_router", "devices_router", "exams_router", "profile_router", "questions_router", "students_router", "proctor_router", "teacher_proctor_router", "teacher_router", "announcement_router", "emergency_contacts_router", "institutions_router", "departments_router", "webauthn_router", "notifications_router", "syllabus_router", "achievements_router"]
+__all__ = ["admin_router", "auth_router", "devices_router", "exams_router", "profile_router", "questions_router", "students_router", "proctor_router", "teacher_proctor_router", "teacher_router", "announcement_router", "emergency_contacts_router", "institutions_router", "departments_router", "webauthn_router", "notifications_router", "syllabus_router", "achievements_router", "security_router"]
 

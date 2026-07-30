@@ -157,6 +157,36 @@ body {
   box-shadow: 0 12px 35px rgba(3, 22, 54, 0.08);
 }
 
+.mic-bar {
+  animation: micPulse 1.5s infinite ease-in-out;
+}
+
+@keyframes micPulse {
+  0%, 100% { height: 4px; }
+  50% { height: 24px; }
+}
+
+.face-scan-line {
+  animation: faceScan 3s infinite linear;
+}
+
+@keyframes faceScan {
+  0% { top: 0%; }
+  50% { top: 100%; }
+  100% { top: 0%; }
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.dark .glass-panel {
+  background: rgba(19, 21, 22, 0.7);
+  border: 1px solid rgba(68, 71, 78, 0.8);
+}
+
 .btn-primary {
   background-color: var(--color-primary);
   color: var(--color-on-primary);

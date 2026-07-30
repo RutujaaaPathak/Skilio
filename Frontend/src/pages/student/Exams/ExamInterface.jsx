@@ -1,28 +1,22 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '../../../hooks/useAuth.js';
 import Icon from '../../../components/Icon.jsx';
 import { api } from '../../../services/api.js';
 import { proctorBufferService } from '../../../services/proctorBufferService.js';
 
 export default function ExamInterface() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [current, setCurrent] = useState(1);
   const [selectedAnswers, setSelectedAnswers] = useState({});
   const [questionsData, setQuestionsData] = useState([]);
   const [exam, setExam] = useState(null);
   const [timeRemaining, setTimeRemaining] = useState(3600); // 1 hour default
-  const [user, setUser] = useState(null);
+  const [errorState, setErrorState] = useState(null);
 
-  // Load user profile, offline exam package, and persisted warning count on mount
+  // Load offline exam package and persisted warning count on mount
   useEffect(() => {
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      try {
-        setUser(JSON.parse(userStr));
-      } catch (e) {
-        console.error("Failed to parse user:", e);
-      }
-    }
 
     const saved = parseInt(localStorage.getItem('exam_warning_count') || '0', 10);
     if (saved > 0) {
@@ -64,31 +58,8 @@ export default function ExamInterface() {
           }
         })
         .catch(e => {
-          console.warn("Failed to fetch offline package, using mock data:", e);
-          const mockExam = {
-            id: 1,
-            title: "Demo Exam",
-            duration_minutes: 60,
-            total_marks: 100,
-          };
-          const mockQuestions = Array.from({ length: 10 }, (_, i) => ({
-            id: i + 1,
-            order_index: i + 1,
-            question_text: `Sample question ${i + 1}? This is a demo question for testing the interface.`,
-            options: JSON.stringify([
-              `Option A for question ${i + 1}`,
-              `Option B for question ${i + 1}`,
-              `Option C for question ${i + 1}`,
-              `Option D for question ${i + 1}`,
-            ]),
-            marks: 10,
-          }));
-          setExam(mockExam);
-          setQuestionsData(mockQuestions);
-          setTimeRemaining(mockExam.duration_minutes * 60);
-          if (!localStorage.getItem('session_token')) {
-            localStorage.setItem('session_token', 'demo-session-token');
-          }
+          console.error("Failed to fetch offline package:", e);
+          setErrorState("Could not load exam questions. Please check your connection and try again.");
         });
     }
   }, []);
@@ -117,7 +88,7 @@ export default function ExamInterface() {
   }, [timeRemaining]);
 
   // Proctoring States
-  const [sessionToken] = useState(localStorage.getItem('session_token') || 'demo-session-token-alice-123');
+  const [sessionToken] = useState(localStorage.getItem('session_token'));
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [warningCount, setWarningCount] = useState(0);
   const [logs, setLogs] = useState([]);
@@ -139,6 +110,14 @@ export default function ExamInterface() {
   const trackerTaskRef = useRef(null);
   const analysisIntervalRef = useRef(null);
   
+  // ── Proctoring Time Thresholds (milliseconds) ──
+  const PROCTORING_THRESHOLDS = {
+    NO_FACE_WARNING: 3000,
+    NO_FACE_VIOLATION: 7000,
+    MULTIPLE_FACE_WARNING: 3000,
+    MULTIPLE_FACE_VIOLATION: 7000,
+  };
+
   // ── Gaze Detection Configuration ──
   // All thresholds are normalised to [0,1] relative to video dimensions.
   // tracking.js face rectangles are noisy, so we use only coarse position
@@ -154,9 +133,16 @@ export default function ExamInterface() {
     WARNING_COOLDOWN_MS: 10000,
   };
 
-  const noFaceTimerRef = useRef(0);
+  // ── Face state machine refs (time-based continuous duration) ──
+  const noFaceStartRef = useRef(0);                // timestamp when no-face began (0 = face present)
+  const noFaceStateRef = useRef('NORMAL');          // NORMAL | NO_FACE_PENDING | NO_FACE_WARNING | NO_FACE_VIOLATION
+  const noFaceViolationLoggedRef = useRef(false);   // prevent duplicate logging per incident
+
+  const multiFaceStartRef = useRef(0);              // timestamp when multi-face began (0 = single face)
+  const multiFaceStateRef = useRef('NORMAL');        // NORMAL | MULTI_FACE_PENDING | MULTI_FACE_WARNING | MULTI_FACE_VIOLATION
+  const multiFaceViolationLoggedRef = useRef(false); // prevent duplicate logging per incident
+
   const lookingAwayTimerRef = useRef(0);
-  const multipleFacesTimerRef = useRef(0);
   const warningCountRef = useRef(0);
   const lastEventTimeRef = useRef({});  // cooldown per event type
 
@@ -168,11 +154,22 @@ export default function ExamInterface() {
   const gazeConfidenceRef = useRef(1.0);
   const faceLastSeenRef = useRef(Date.now());
   const [activeWarning, setActiveWarning] = useState(null); // { reason, count, max }
+  const [faceAlert, setFaceAlert] = useState(null); // { type: 'no_face'|'multiple_faces', level: 'warning'|'violation', duration: number }
 
   // ── Proctor config derived from exam ──
   const proctorConfig = useMemo(() => {
-    return { face: false, multiPerson: false, phone: false, screen: false, fullscreen: false, microphone: false };
-  }, []);
+    if (!exam) {
+      return { face: false, multiPerson: false, phone: false, screen: false, fullscreen: false, microphone: false };
+    }
+    return {
+      face: exam.face_detection_enabled ?? true,
+      multiPerson: exam.multiple_person_detection_enabled ?? true,
+      phone: exam.phone_detection_enabled ?? true,
+      screen: exam.screen_monitoring_enabled ?? true,
+      fullscreen: exam.fullscreen_required ?? true,
+      microphone: exam.microphone_required ?? true,
+    };
+  }, [exam]);
 
   const isEventEnabled = useCallback((eventType) => {
     const faceEvents = ['no_face_detected', 'no_face', 'looking_away', 'face_mismatch', 'student_verified', 'camera_blocked'];
@@ -296,36 +293,96 @@ export default function ExamInterface() {
 
             tracker.on('track', event => {
               const data = event.data;
+              const now = Date.now();
+
               if (data.length === 0) {
-                // No face — decay confidence
-                const elapsed = Date.now() - faceLastSeenRef.current;
+                // ── No face: time-based continuous duration state machine ──
                 gazeConfidenceRef.current = Math.max(0.0, gazeConfidenceRef.current - 0.02);
-                noFaceTimerRef.current += 1;
-                const noFaceThreshold = gazeConfidenceRef.current < 0.3 ? 40 : 25;
-                if (noFaceTimerRef.current >= noFaceThreshold) {
+
+                // Reset multi-face state
+                multiFaceStartRef.current = 0;
+                multiFaceStateRef.current = 'NORMAL';
+                multiFaceViolationLoggedRef.current = false;
+
+                // Start timer on first no-face frame
+                if (noFaceStateRef.current === 'NORMAL') {
+                  noFaceStartRef.current = now;
+                  noFaceStateRef.current = 'NO_FACE_PENDING';
+                  noFaceViolationLoggedRef.current = false;
+                }
+
+                const duration = now - noFaceStartRef.current;
+
+                if (duration >= PROCTORING_THRESHOLDS.NO_FACE_VIOLATION) {
+                  noFaceStateRef.current = 'NO_FACE_VIOLATION';
                   setProctorStatus(prev => ({ ...prev, faceVisible: false, faceCount: 0 }));
-                  const conf = Math.round(gazeConfidenceRef.current * 10) / 10;
-                  triggerViolation("Face not detected. Please face the camera.", "no_face_detected", 0.5 + conf * 0.4);
-                  noFaceTimerRef.current = 0;
+                  if (!noFaceViolationLoggedRef.current) {
+                    noFaceViolationLoggedRef.current = true;
+                    const conf = Math.round(gazeConfidenceRef.current * 10) / 10;
+                    const durSec = parseFloat((duration / 1000).toFixed(1));
+                    logProctorViolation("no_face_detected", 0.5 + conf * 0.4, { duration_seconds: durSec }, `Face not detected for ${durSec} seconds`);
+                    addLogEntry(`[Proctoring] Face not detected for ${durSec}s`, 'error');
+                    setFaceAlert({ type: 'no_face', level: 'violation', duration: durSec });
+                  }
+                } else if (duration >= PROCTORING_THRESHOLDS.NO_FACE_WARNING) {
+                  noFaceStateRef.current = 'NO_FACE_WARNING';
+                  setProctorStatus(prev => ({ ...prev, faceVisible: false, faceCount: 0 }));
+                  const durSec = parseFloat((duration / 1000).toFixed(1));
+                  setFaceAlert({ type: 'no_face', level: 'warning', duration: durSec });
+                } else {
+                  // PENDING — ignore, keep normal appearance
+                  setProctorStatus(prev => ({ ...prev, faceVisible: true, faceCount: 0 }));
+                  setFaceAlert(null);
                 }
+
                 lookingAwayTimerRef.current = 0;
-                multipleFacesTimerRef.current = 0;
+
               } else if (data.length > 1) {
-                // Multiple faces
-                multipleFacesTimerRef.current += 1;
-                if (multipleFacesTimerRef.current >= 10) { // ~2 seconds of multi-faces
-                  setProctorStatus(prev => ({ ...prev, faceCount: data.length }));
-                  triggerViolation("Multiple faces detected in camera view!", "multiple_faces_detected", 0.9);
-                  multipleFacesTimerRef.current = 0;
+                // ── Multiple faces: time-based continuous duration state machine ──
+                // Reset no-face state
+                noFaceStartRef.current = 0;
+                noFaceStateRef.current = 'NORMAL';
+                noFaceViolationLoggedRef.current = false;
+
+                // Start timer on first multi-face frame
+                if (multiFaceStateRef.current === 'NORMAL') {
+                  multiFaceStartRef.current = now;
+                  multiFaceStateRef.current = 'MULTI_FACE_PENDING';
+                  multiFaceViolationLoggedRef.current = false;
                 }
-                noFaceTimerRef.current = 0;
+
+                const duration = now - multiFaceStartRef.current;
+
+                if (duration >= PROCTORING_THRESHOLDS.MULTIPLE_FACE_VIOLATION) {
+                  multiFaceStateRef.current = 'MULTI_FACE_VIOLATION';
+                  setProctorStatus(prev => ({ ...prev, faceCount: data.length }));
+                  if (!multiFaceViolationLoggedRef.current) {
+                    multiFaceViolationLoggedRef.current = true;
+                    const durSec = parseFloat((duration / 1000).toFixed(1));
+                    logProctorViolation("multiple_faces_detected", 0.9, { duration_seconds: durSec, face_count: data.length }, `Multiple faces detected for ${durSec} seconds`);
+                    addLogEntry(`[Proctoring] Multiple faces detected for ${durSec}s`, 'error');
+                    setFaceAlert({ type: 'multiple_faces', level: 'violation', duration: durSec });
+                  }
+                } else if (duration >= PROCTORING_THRESHOLDS.MULTIPLE_FACE_WARNING) {
+                  multiFaceStateRef.current = 'MULTI_FACE_WARNING';
+                  const durSec = parseFloat((duration / 1000).toFixed(1));
+                  setFaceAlert({ type: 'multiple_faces', level: 'warning', duration: durSec });
+                }
+
                 lookingAwayTimerRef.current = 0;
+
               } else {
-                // Exactly 1 face — boost confidence
-                faceLastSeenRef.current = Date.now();
+                // ── Exactly 1 face — reset all face states, boost confidence ──
+                noFaceStartRef.current = 0;
+                noFaceStateRef.current = 'NORMAL';
+                noFaceViolationLoggedRef.current = false;
+                multiFaceStartRef.current = 0;
+                multiFaceStateRef.current = 'NORMAL';
+                multiFaceViolationLoggedRef.current = false;
+                setFaceAlert(null);
+
+                faceLastSeenRef.current = now;
                 gazeConfidenceRef.current = Math.min(1.0, gazeConfidenceRef.current + 0.05);
-                noFaceTimerRef.current = 0;
-                multipleFacesTimerRef.current = 0;
                 setProctorStatus(prev => ({ ...prev, faceVisible: true, faceCount: 1 }));
 
                 const rect = data[0];
@@ -440,7 +497,7 @@ export default function ExamInterface() {
     return () => {
       cleanupWebcam();
     };
-  }, [proctorConfig]);
+  }, [proctorConfig, exam]);
 
   // Periodically flush buffered proctor events
   useEffect(() => {
@@ -865,6 +922,23 @@ export default function ExamInterface() {
     return 'text-error bg-error/20 border border-error/30 animate-pulse';
   };
 
+  if (errorState) {
+    return (
+      <div className="min-h-screen bg-surface flex items-center justify-center font-sans">
+        <div className="text-center space-y-md max-w-md mx-auto p-md">
+          <div className="w-16 h-16 mx-auto rounded-full bg-error-container flex items-center justify-center">
+            <Icon name="error_outline" className="text-error text-[32px]" fill />
+          </div>
+          <h2 className="text-headline-sm font-bold text-error">Could Not Load Exam</h2>
+          <p className="text-on-surface-variant">{errorState}</p>
+          <button onClick={() => navigate('/student/exams')} className="inline-flex h-11 px-lg items-center bg-primary text-on-primary rounded-lg font-bold hover:opacity-90 gap-xs">
+            <Icon name="arrow_back" /> Back to Exams
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (questionsData.length === 0) {
     return (
       <div className="min-h-screen bg-surface flex items-center justify-center font-sans">
@@ -1102,6 +1176,32 @@ export default function ExamInterface() {
             </div>
           </div>
 
+          {/* Non-blocking Face Alert Banner */}
+          {faceAlert && (
+            <div className={`rounded-xl border p-md text-sm font-medium ${
+              faceAlert.level === 'violation'
+                ? 'bg-error/10 border-error/30 text-error'
+                : 'bg-warning/10 border-warning/30 text-warning'
+            }`}>
+              <div className="flex items-center gap-xs">
+                <Icon
+                  name={faceAlert.level === 'violation' ? 'gavel' : 'warning'}
+                  className="text-base"
+                  fill
+                />
+                <span className="font-bold text-label-sm">
+                  {faceAlert.type === 'no_face'
+                    ? (faceAlert.level === 'violation'
+                        ? `Face not detected for ${faceAlert.duration}s`
+                        : '⚠️ Face not clearly visible. Please adjust your position.')
+                    : (faceAlert.level === 'violation'
+                        ? `Multiple faces detected for ${faceAlert.duration}s`
+                        : '⚠️ Multiple faces detected. Please ensure you are alone in the camera frame.')}
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Verification Indicators */}
           <div className="bg-surface-container-lowest rounded-xl border border-outline-variant p-md space-y-xs">
             <div className="flex justify-between items-center mb-xs border-b pb-xs">
@@ -1144,46 +1244,6 @@ export default function ExamInterface() {
                 ))
               )}
             </div>
-          </div>
-
-          {/* Test Simulation Panel */}
-          <div className="bg-surface-container-lowest rounded-xl border border-outline-variant p-md space-y-xs">
-            <div className="flex justify-between items-center mb-xs border-b pb-xs">
-              <h4 className="text-label-sm font-bold text-primary uppercase tracking-wider">Simulation Panel</h4>
-              <span className="text-[9px] px-sm bg-secondary-container text-primary font-bold uppercase rounded">Test Tools</span>
-            </div>
-            <div className="grid grid-cols-2 gap-xs">
-              <button 
-                onClick={() => triggerViolation("Mobile phone detected inside proctor frame!", "phone_detected", 0.95)}
-                className="py-1 px-1 bg-error/10 text-error hover:bg-error/20 border border-error/30 text-[9px] font-bold rounded cursor-pointer text-center"
-              >
-                Simulate Phone
-              </button>
-              <button 
-                onClick={() => triggerViolation("Tab switch/minimization detected!", "tab_switch", 0.9)}
-                className="py-1 px-1 bg-warning/10 text-warning-container hover:bg-warning/20 border border-warning/30 text-[9px] font-bold rounded cursor-pointer text-center"
-              >
-                Simulate Tab Switch
-              </button>
-              <button 
-                onClick={() => triggerViolation("Face not detected. Please face the camera.", "no_face_detected", 0.7)}
-                className="py-1 px-1 bg-secondary-container/20 text-primary hover:bg-secondary-container/40 border border-secondary/30 text-[9px] font-bold rounded cursor-pointer text-center"
-              >
-                Simulate No Face
-              </button>
-              <button 
-                onClick={() => triggerViolation("Multiple faces detected in camera view!", "multiple_faces_detected", 0.9)}
-                className="py-1 px-1 bg-secondary-container/20 text-primary hover:bg-secondary-container/40 border border-secondary/30 text-[9px] font-bold rounded cursor-pointer text-center"
-              >
-                Simulate Multi-Face
-              </button>
-            </div>
-            <button
-              onClick={() => alert("Demo Security: Full AI proctoring suite coming soon!")}
-              className="w-full py-md mt-xs bg-gradient-to-r from-secondary to-primary text-white font-bold rounded-lg text-xs hover:opacity-90 flex items-center justify-center gap-xs cursor-pointer shadow-md transition-all hover:scale-[1.02]"
-            >
-              <Icon name="security" /> Demo Security
-            </button>
           </div>
 
           <button 
