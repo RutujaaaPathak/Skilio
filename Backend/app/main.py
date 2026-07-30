@@ -26,9 +26,11 @@ from app.routes import (
     achievements_router,
     announcement_router,
     auth_router,
+    classes_router,
     departments_router,
     devices_router,
     emergency_contacts_router,
+    evaluations_router,
     exams_router,
     institutions_router,
     notifications_router,
@@ -43,6 +45,8 @@ from app.routes import (
     webauthn_router,
 )
 from app.models.achievement import UnlockedAchievement
+from app.models.evaluation import ExamEvaluationStatus
+from app.models.exam import ExamAssignment
 from app.models.notification import Notification
 from app.services.email_service import EmailService
 
@@ -127,6 +131,8 @@ app.include_router(achievements_router, prefix="/api")
 app.include_router(webauthn_router, prefix="/api")
 app.include_router(syllabus_router, prefix="/api")
 app.include_router(security_router, prefix="/api")
+app.include_router(classes_router, prefix="/api")
+app.include_router(evaluations_router, prefix="/api")
 
 
 if settings.ENABLE_METRICS:
@@ -328,3 +334,22 @@ def _run_migrations():
             "FOREIGN KEY (teacher_id) REFERENCES users(id)"
             ")"
         ))
+    if "completed" not in syllabus_columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE syllabus ADD COLUMN completed BOOLEAN DEFAULT 0"))
+
+    try:
+        from app.database import SessionLocal as MigrateSession
+        ms = MigrateSession()
+        existing_ids = {r[0] for r in ms.query(ExamEvaluationStatus.exam_id).all()}
+        missing_ids = ms.query(ExamAssignment.exam_id).filter(
+            ExamAssignment.status.in_(["submitted", "reviewed"]),
+        ).distinct().all()
+        for (eid,) in missing_ids:
+            if eid not in existing_ids:
+                ms.add(ExamEvaluationStatus(exam_id=eid, results_published=True))
+        if missing_ids:
+            ms.commit()
+        ms.close()
+    except Exception:
+        pass

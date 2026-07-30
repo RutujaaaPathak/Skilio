@@ -10,5 +10,6 @@ export const syllabusService = {
   create: (data) => api.post('/syllabus', data),
   bulkCreate: (entries) => api.post('/syllabus/bulk', entries),
   update: (id, data) => api.put(`/syllabus/${id}`, data),
+  toggleComplete: (id) => api.patch(`/syllabus/${id}/toggle-complete`),
   delete: (id) => api.delete(`/syllabus/${id}`),
 };

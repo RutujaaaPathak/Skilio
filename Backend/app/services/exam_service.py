@@ -11,6 +11,7 @@ from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
 
 from app.models.audit_log import AuditLog
+from app.models.evaluation import AnswerEvaluation, ExamEvaluationStatus
 from app.models.exam import Exam, ExamAssignment, ExamQuestion, ExamSession, StudentAnswer
 from app.models.user import User
 from app.schemas.exam import AnswerSyncRequest, ExamCreate, ExamQuestionBulkCreate, ExamRescheduleRequest, ExamUpdate
@@ -402,13 +403,18 @@ class ExamService:
             db.query(ExamAssignment)
             .filter(
                 ExamAssignment.student_id == user.id,
-                ExamAssignment.status == "submitted",
+                ExamAssignment.status.in_(["submitted", "reviewed"]),
             )
             .order_by(ExamAssignment.submitted_at.desc())
             .all()
         )
         results = []
         for a in assignments:
+            eval_status = db.query(ExamEvaluationStatus).filter(
+                ExamEvaluationStatus.exam_id == a.exam_id,
+            ).first()
+            if eval_status and not eval_status.results_published:
+                continue
             try:
                 submission = ExamService.get_my_submission(db, a.exam_id, user)
             except HTTPException:
@@ -1110,6 +1116,9 @@ class ExamService:
             assignment.status = "submitted"
             assignment.submitted_at = now
             submitted_at = now
+            existing_eval_status = db.query(ExamEvaluationStatus).filter(ExamEvaluationStatus.exam_id == exam_id).first()
+            if not existing_eval_status:
+                db.add(ExamEvaluationStatus(exam_id=exam_id, results_published=False))
 
         db.commit()
 
@@ -1129,6 +1138,16 @@ class ExamService:
         if not assignment:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not assigned to this exam")
 
+        eval_status = db.query(ExamEvaluationStatus).filter(
+            ExamEvaluationStatus.exam_id == exam_id,
+        ).first()
+
+        if not eval_status or not eval_status.results_published:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Results have not been published yet for this exam",
+            )
+
         session = db.query(ExamSession).filter(
             ExamSession.exam_id == exam_id,
             ExamSession.student_id == user.id,
@@ -1142,10 +1161,15 @@ class ExamService:
             StudentAnswer.exam_session_id == session.id,
         ).order_by(StudentAnswer.id).all()
 
-        # Get all exam questions to map marks and evaluate correct answers
         exam = session.exam
         exam_questions = db.query(ExamQuestion).filter(ExamQuestion.exam_id == exam_id).all()
         eq_map = {eq.question_id: eq for eq in exam_questions}
+
+        evaluations = db.query(AnswerEvaluation).filter(
+            AnswerEvaluation.exam_id == exam_id,
+            AnswerEvaluation.student_id == user.id,
+        ).all()
+        eval_map = {ev.question_id: ev for ev in evaluations}
 
         total = len(exam_questions)
         answered = sum(1 for a in answers if a.answer_text or a.selected_option)
@@ -1164,7 +1188,13 @@ class ExamService:
 
             total_marks += eq.marks
 
-            # Determine correctness of the student answer
+            ev = eval_map.get(ans.question_id)
+            if ev and ev.marks_awarded is not None:
+                earned_marks += ev.marks_awarded
+                if ev.marks_awarded > 0:
+                    correct_count += 1
+                continue
+
             is_correct = False
             if question.question_type == "mcq":
                 if ans.answer_text and ans.answer_text.strip().lower() == question.correct_answer.strip().lower():
@@ -1185,7 +1215,6 @@ class ExamService:
                     except Exception:
                         pass
             else:
-                # Text/subjective or direct text matching – compare word-by-word ignoring case
                 if ans.answer_text and _words_match(ans.answer_text, question.correct_answer):
                     is_correct = True
 
@@ -1195,7 +1224,6 @@ class ExamService:
             elif exam.negative_marking_enabled:
                 earned_marks -= exam.negative_marks_per_question
 
-        # If total_marks is 0, fall back to matching question counts
         if total_marks > 0:
             score_percentage = round((earned_marks / total_marks * 100), 2)
         elif total > 0:
@@ -1204,7 +1232,6 @@ class ExamService:
             score_percentage = 0.0
         score_percentage = max(0.0, score_percentage)
 
-        # Calculate Integrity Score (100% - risk_score)
         from app.services.proctor_service import ProctorService
         risk_score = ProctorService.calculate_risk_score(db, session.id)
         integrity_percentage = max(0.0, 100.0 - risk_score)

@@ -20,6 +20,7 @@ def _response(s: Syllabus) -> SyllabusResponse:
         unit=s.unit,
         description=s.description,
         learning_outcomes=s.learning_outcomes,
+        completed=s.completed,
         is_active=s.is_active,
         created_at=s.created_at,
         updated_at=s.updated_at,
@@ -147,3 +148,20 @@ def delete_syllabus(
     s.is_active = False
     db.commit()
     return {"message": "Syllabus entry deactivated successfully"}
+
+
+@router.patch("/{syllabus_id}/toggle-complete", response_model=SyllabusResponse)
+def toggle_syllabus_complete(
+    syllabus_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_teacher_or_admin),
+):
+    s = db.query(Syllabus).filter(Syllabus.id == syllabus_id).first()
+    if not s:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Syllabus entry not found")
+    if current_user.role != "admin" and s.teacher_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    s.completed = not s.completed
+    db.commit()
+    db.refresh(s)
+    return _response(s)

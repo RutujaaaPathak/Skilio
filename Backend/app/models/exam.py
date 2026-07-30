@@ -56,6 +56,9 @@ class Exam(Base):
     teacher = relationship("User", lazy="joined")
     question_links = relationship("ExamQuestion", back_populates="exam", cascade="all, delete-orphan")
     assignments = relationship("ExamAssignment", back_populates="exam", cascade="all, delete-orphan")
+    class_links = relationship("ExamClass", back_populates="exam", cascade="all, delete-orphan")
+    evaluations = relationship("AnswerEvaluation", back_populates="exam", cascade="all, delete-orphan")
+    evaluation_status = relationship("ExamEvaluationStatus", back_populates="exam", uselist=False, cascade="all, delete-orphan")
 
 
 class ExamQuestion(Base):

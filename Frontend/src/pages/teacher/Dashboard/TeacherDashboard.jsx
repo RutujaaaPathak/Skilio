@@ -257,7 +257,7 @@ export default function TeacherDashboard({ page, setPage }) {
             {[
               ['Create Exam', 'add', 'createExam'],
               ['Schedule', 'event', 'scheduling'],
-              ['Assign Students', 'group_add', 'assignStudents'],
+              ['Classes', 'group', 'classes'],
               ['Question Bank', 'database', 'questionBank'],
               ['Reports', 'analytics', 'reports'],
               ['Live Room', 'videocam', 'liveRoom'],
@@ -374,28 +374,6 @@ export default function TeacherDashboard({ page, setPage }) {
         </section>
 
         <section className="col-span-12 card p-md">
-          <h2 className="text-xl font-bold text-primary mb-md">Upcoming Exams</h2>
-          {loading ? (
-            <div className="grid md:grid-cols-3 gap-md">
-              {[1,2,3].map(i => <div key={i} className="animate-pulse border border-outline-variant rounded-lg p-md"><div className="h-4 bg-surface-container-high rounded w-3/4 mb-xs" /><div className="h-3 bg-surface-container-high rounded w-1/2 mb-xs" /><div className="h-3 bg-surface-container-high rounded w-2/3 mb-xs" /><div className="h-3 bg-surface-container-high rounded w-12" /></div>)}
-            </div>
-          ) : upcoming.length === 0 ? (
-            <p className="text-on-surface-variant text-sm">No upcoming exams.</p>
-          ) : (
-            <div className="grid md:grid-cols-3 gap-md">
-              {upcoming.slice(0, 6).map(e => (
-                <div key={e.id} className="border border-outline-variant rounded-lg p-md">
-                  <p className="font-bold text-primary text-sm">{e.title}</p>
-                  <p className="text-xs text-on-surface-variant">{e.subject}</p>
-                  <p className="text-xs text-on-surface-variant mt-xs">{new Date(e.start_time).toLocaleString()} • {e.duration_minutes} min</p>
-                  <span className={`inline-block mt-xs text-xs font-bold ${e.status === 'active' ? 'text-error' : 'text-secondary'}`}>{e.status}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="col-span-12 card p-md">
           <h2 className="text-xl font-bold text-primary mb-md">Integrity Trend (Weekly)</h2>
           {loading ? (
             <div className="flex items-end gap-sm h-32 py-md">
@@ -420,31 +398,6 @@ export default function TeacherDashboard({ page, setPage }) {
             </div>
           ) : (
             <p className="text-sm text-on-surface-variant py-md">No integrity trend data available yet.</p>
-          )}
-        </section>
-
-        <section className="col-span-6 card p-md">
-          <h2 className="text-xl font-bold text-primary mb-md">Performance Trend</h2>
-          {loading ? (
-            <div className="space-y-md py-md">
-              {[1,2,3,4].map(i => <div key={i} className="animate-pulse"><div className="flex justify-between mb-xs"><div className="h-3 bg-surface-container-high rounded w-24" /><div className="h-3 bg-surface-container-high rounded w-8" /></div><div className="h-2 bg-surface-container-high rounded-full w-full" /></div>)}
-            </div>
-          ) : trends?.performance_trend?.length > 0 ? (
-            <div className="space-y-md">
-              {trends.performance_trend.map(d => (
-                <div key={d.label}>
-                  <div className="flex justify-between text-xs mb-xs">
-                    <span className="text-on-surface-variant truncate">{d.label}</span>
-                    <span className="font-bold text-primary">{d.value}%</span>
-                  </div>
-                  <div className="w-full bg-surface-container-high rounded-full h-2">
-                    <div className="h-2 rounded-full bg-primary transition-all duration-500" style={{ width: `${Math.min(d.value, 100)}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-on-surface-variant py-md">No performance data yet.</p>
           )}
         </section>
 
@@ -474,61 +427,6 @@ export default function TeacherDashboard({ page, setPage }) {
             </div>
           ) : (
             <p className="text-sm text-on-surface-variant py-md">No risk data available.</p>
-          )}
-        </section>
-
-        <section className="col-span-6 card p-md">
-          <h2 className="text-xl font-bold text-primary mb-md">Most Cheated Subject</h2>
-          {loading ? (
-            <div className="animate-pulse space-y-md py-md">
-              <div className="h-6 bg-surface-container-high rounded w-32 mx-auto" />
-              <div className="flex gap-md"><div className="flex-1 h-16 bg-surface-container-high rounded-lg" /><div className="flex-1 h-16 bg-surface-container-high rounded-lg" /></div>
-            </div>
-          ) : analytics?.most_cheated_subject ? (
-            <>
-              <div className="text-center py-md border-b border-outline-variant mb-md">
-                <p className="text-2xl font-extrabold text-primary">{analytics.most_cheated_subject.subject}</p>
-                <p className="text-xs text-on-surface-variant">{analytics.most_cheated_subject.total_violations} high/critical violation{(analytics.most_cheated_subject.total_violations || 0) !== 1 ? 's' : ''}</p>
-              </div>
-              <div className="flex gap-md text-sm">
-                <div className="flex-1 text-center p-md bg-error-container rounded-lg">
-                  <p className="text-2xl font-bold text-error">{analytics.most_cheated_subject.critical_count}</p>
-                  <p className="text-xs text-on-surface-variant">Critical</p>
-                </div>
-                <div className="flex-1 text-center p-md bg-error/10 rounded-lg">
-                  <p className="text-2xl font-bold text-error">{analytics.most_cheated_subject.high_count}</p>
-                  <p className="text-xs text-on-surface-variant">High</p>
-                </div>
-              </div>
-            </>
-          ) : (
-            <p className="text-sm text-on-surface-variant py-md">No integrity violation data available.</p>
-          )}
-        </section>
-
-        <section className="col-span-6 card p-md">
-          <h2 className="text-xl font-bold text-primary mb-md">Weak Topics Analysis</h2>
-          {loading ? (
-            <div className="space-y-md py-md">
-              {[1,2,3].map(i => <div key={i} className="animate-pulse"><div className="flex justify-between mb-xs"><div className="h-3 bg-surface-container-high rounded w-28" /><div className="h-3 bg-surface-container-high rounded w-8" /></div><div className="h-2 bg-surface-container-high rounded-full w-full" /><div className="h-2 bg-surface-container-high rounded w-20 mt-xs" /></div>)}
-            </div>
-          ) : analytics?.weak_topics?.length > 0 ? (
-            <div className="space-y-md max-h-72 overflow-y-auto">
-              {analytics.weak_topics.map(t => (
-                <div key={t.topic}>
-                  <div className="flex justify-between text-xs mb-xs">
-                    <span className="text-on-surface-variant truncate">{t.topic}</span>
-                    <span className="font-bold text-primary">{t.average_score}%</span>
-                  </div>
-                  <div className="w-full bg-surface-container-high rounded-full h-2">
-                    <div className="h-2 rounded-full bg-error transition-all duration-500" style={{ width: `${Math.min(t.average_score, 100)}%` }} />
-                  </div>
-                  <p className="text-xs text-on-surface-variant mt-xs">{t.subject} • {t.total_questions} question{(t.total_questions || 0) !== 1 ? 's' : ''}</p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-on-surface-variant py-md">No weak topics found — students are performing well!</p>
           )}
         </section>
 
@@ -621,76 +519,6 @@ export default function TeacherDashboard({ page, setPage }) {
               <p className="text-2xl font-bold text-primary">40%</p>
             </div>
           </div>
-        </section>
-
-        <section className="col-span-12 card p-md">
-          <div className="flex items-center justify-between mb-md">
-            <h2 className="text-xl font-bold text-primary">Subject Performance</h2>
-            {expandedSubject && (
-              <button onClick={() => setExpandedSubject(null)} className="text-xs text-secondary font-bold hover:underline">&larr; Back to all subjects</button>
-            )}
-          </div>
-          {loading ? (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-md">
-              {[1,2,3].map(i => <div key={i} className="animate-pulse border border-outline-variant rounded-lg p-md"><div className="h-5 bg-surface-container-high rounded w-24 mb-sm" /><div className="flex justify-between mb-xs"><div className="h-3 bg-surface-container-high rounded w-16" /><div className="h-4 bg-surface-container-high rounded w-10" /></div><div className="h-2 bg-surface-container-high rounded-full mb-md" /><div className="grid grid-cols-3 gap-xs"><div className="h-6 bg-surface-container-high rounded" /><div className="h-6 bg-surface-container-high rounded" /><div className="h-6 bg-surface-container-high rounded" /></div></div>)}
-            </div>
-          ) : expandedSubject ? (
-            (() => {
-              const exams = (analytics?.exam_performance || []).filter(e => e.subject === expandedSubject)
-              return exams.length > 0 ? (
-                <div className="divide-y divide-outline-variant">
-                  {exams.map(e => (
-                    <div key={e.exam_id} className="py-sm flex items-center justify-between">
-                      <div className="min-w-0 flex-1 mr-md">
-                        <p className="font-bold text-primary text-sm">{e.title}</p>
-                        <p className="text-xs text-on-surface-variant">{e.student_count} student{(e.student_count || 0) !== 1 ? 's' : ''}</p>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <p className="font-bold text-primary">{e.average_score != null ? `${e.average_score}%` : '—'}</p>
-                        <div className="w-24 bg-surface-container-high rounded-full h-1.5 mt-xs ml-auto">
-                          <div className="h-1.5 rounded-full bg-primary" style={{ width: `${Math.min(e.average_score ?? 0, 100)}%` }} />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : <p className="text-sm text-on-surface-variant py-md">No exam data for {expandedSubject}.</p>
-            })()
-          ) : analytics?.subject_performance?.length > 0 ? (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-md">
-              {analytics.subject_performance.map(s => (
-                <button key={s.subject} onClick={() => setExpandedSubject(s.subject)} className="border border-outline-variant rounded-lg p-md text-left hover:border-secondary-container hover:bg-secondary-container/5 transition-colors cursor-pointer">
-                  <div className="flex items-center justify-between mb-sm">
-                    <p className="font-bold text-primary">{s.subject}</p>
-                    <Icon className="text-on-surface-variant text-sm">chevron_right</Icon>
-                  </div>
-                  <div className="flex justify-between items-center mb-xs">
-                    <span className="text-xs text-on-surface-variant">Avg Score</span>
-                    <span className="text-lg font-bold text-primary">{s.average_score != null ? `${s.average_score}%` : '—'}</span>
-                  </div>
-                  <div className="w-full bg-surface-container-high rounded-full h-2 mb-md">
-                    <div className="h-2 rounded-full bg-primary transition-all duration-500" style={{ width: `${Math.min(s.average_score ?? 0, 100)}%` }} />
-                  </div>
-                  <div className="grid grid-cols-3 gap-xs text-xs text-center">
-                    <div>
-                      <p className="font-bold text-primary">{s.total_students}</p>
-                      <p className="text-on-surface-variant">Students</p>
-                    </div>
-                    <div>
-                      <p className="font-bold text-primary">{s.total_exams}</p>
-                      <p className="text-on-surface-variant">Exams</p>
-                    </div>
-                    <div>
-                      <p className={`font-bold ${s.integrity_incidents > 0 ? 'text-error' : 'text-success'}`}>{s.integrity_incidents}</p>
-                      <p className="text-on-surface-variant">Issues</p>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-on-surface-variant py-md">No subject performance data available yet.</p>
-          )}
         </section>
 
         <section className="col-span-12 card p-md">
