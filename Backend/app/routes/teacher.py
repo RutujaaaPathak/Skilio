@@ -812,11 +812,11 @@ def get_teacher_subjects(
             seen.add(s)
             result.append(s)
 
-    if current_user.department:
+    if current_user.branch:
         dept_question_subjects = (
             db.query(Question.subject)
             .join(User, Question.teacher_id == User.id)
-            .filter(User.department == current_user.department)
+            .filter(User.branch == current_user.branch)
             .distinct()
             .all()
         )

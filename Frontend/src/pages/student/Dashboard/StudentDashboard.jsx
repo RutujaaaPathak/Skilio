@@ -207,17 +207,21 @@ export default function StudentDashboard() {
   }, [assignments, completion]);
 
   const now = new Date();
-  const todayStr = now.toDateString();
 
   const todayExams = useMemo(
     () =>
       assignments
         .filter((a) => {
           const e = a.exam;
-          return e && new Date(e.start_time).toDateString() === todayStr && e.status === 'active';
+          if (!e) return false;
+          if (e.status === 'active') return true;
+          if (e.status === 'scheduled') {
+            return new Date(e.start_time).toDateString() === now.toDateString();
+          }
+          return false;
         })
         .map((a) => a.exam),
-    [assignments, todayStr]
+    [assignments, now]
   );
 
   const upcoming = useMemo(
@@ -227,6 +231,7 @@ export default function StudentDashboard() {
           const e = a.exam;
           if (!e) return false;
           if (e.status === 'active') return false;
+          if (new Date(e.start_time).toDateString() === now.toDateString()) return false;
           return new Date(e.start_time) > now || e.status === 'scheduled';
         })
         .map((a) => a.exam)

@@ -23,6 +23,7 @@ from app.models.password_reset_token import PasswordResetToken
 from app.models.refresh_token import RefreshToken
 from app.models.totp_secret import TOTPSecret
 from app.models.department import Department
+from app.models.institution import Institution
 from app.models.emergency_contact import EmergencyContact
 from app.models.institution import Institution
 from app.models.user import User
@@ -53,7 +54,7 @@ class AuthService:
             "department_id": user.department_id,
             "roll_number": user.roll_number,
             "profile_photo_url": user.profile_photo_url,
-            "department": user.department,
+            "department": department_name,
             "subjects": user.subjects,
             "designation": user.designation,
             "institution_address": user.institution_address,
@@ -187,7 +188,17 @@ class AuthService:
             year=data.year,
             phone=data.phone,
             batch=data.batch,
+            institution_id=data.institution_id,
+            department_id=data.department_id,
         )
+        if data.institution_id and not data.college:
+            inst = db.query(Institution).filter(Institution.id == data.institution_id).first()
+            if inst:
+                user.college = inst.name
+        if data.department_id and not data.branch:
+            dept = db.query(Department).filter(Department.id == data.department_id).first()
+            if dept:
+                user.branch = dept.name
         db.add(user)
         db.commit()
         db.refresh(user)
@@ -825,7 +836,10 @@ class AuthService:
                     detail="A user with this email already exists",
                 )
 
+        relationship_names = {"institution", "department", "emergency_contacts"}
         for field, value in update_data.items():
+            if field in relationship_names:
+                continue
             setattr(user, field, value)
 
         if "institution_id" in update_data and update_data["institution_id"] is not None:

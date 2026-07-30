@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Icon from '../../../components/Icon.jsx';
+import Dropdown from '../../../components/Dropdown.jsx';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { PASSWORD_RULES, getPasswordStrength, getPasswordErrors } from '../../../utils/validation.js';
 import { authService } from '../../../services/authService.js';
@@ -49,9 +50,9 @@ export default function Signup({ defaultRole = 'student' }) {
     }
 
     const payload = { name: form.name, username: form.username.trim() || null, email: form.email, password: form.password, role };
+    payload.institution_id = form.institution_id || null;
+    payload.department_id = form.department_id || null;
     if (role === 'student') {
-      payload.institution_id = form.institution_id || null;
-      payload.department_id = form.department_id || null;
       payload.roll_number = form.roll_number.trim() || null;
       payload.college = form.college.trim() || null;
       payload.branch = form.branch.trim() || null;
@@ -155,67 +156,50 @@ export default function Signup({ defaultRole = 'student' }) {
                   <label htmlFor="signup-confirm" className="text-label-md font-bold text-on-surface-variant">Confirm Password</label>
                   <input id="signup-confirm" className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" type="password" placeholder="Re-enter password" value={form.confirmPassword} onChange={e => setForm(f => ({ ...f, confirmPassword: e.target.value }))} />
                 </div>
-                {role === 'student' && (
-                  <>
-                    <div className="space-y-xs">
+                <div className="space-y-xs">
                       <label htmlFor="signup-institution" className="text-label-md font-bold text-on-surface-variant">College / Institution</label>
-                      <select
-                        id="signup-institution"
-                        className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md"
-                        value={form.institution_id || ''}
-                        onChange={e => {
-                          const val = e.target.value ? Number(e.target.value) : null;
-                          setForm(f => ({ ...f, institution_id: val, department_id: null }));
-                        }}
-                      >
-                        <option value="">Select Institution</option>
-                        {institutions.map(inst => (
-                          <option key={inst.id} value={inst.id}>{inst.name} ({inst.code})</option>
-                        ))}
-                      </select>
+                      <Dropdown
+                        value={form.institution_id}
+                        onChange={val => setForm(f => ({ ...f, institution_id: val, department_id: null }))}
+                        options={institutions.map(inst => ({ ...inst, label: inst.name, value: inst.id }))}
+                        placeholder="Select Institution"
+                        renderOption={o => `${o.name} (${o.code})`}
+                      />
                     </div>
                     {form.institution_id && (
                       <div className="space-y-xs">
                         <label htmlFor="signup-department" className="text-label-md font-bold text-on-surface-variant">Branch / Department</label>
-                        <select
-                          id="signup-department"
-                          className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md"
-                          value={form.department_id || ''}
-                          onChange={e => setForm(f => ({ ...f, department_id: e.target.value ? Number(e.target.value) : null }))}
-                        >
-                          <option value="">Select Department</option>
-                          {departments.map(dept => (
-                            <option key={dept.id} value={dept.id}>{dept.name}</option>
-                          ))}
-                        </select>
+                        <Dropdown
+                          value={form.department_id}
+                          onChange={val => setForm(f => ({ ...f, department_id: val }))}
+                          options={departments.map(d => ({ ...d, label: d.name, value: d.id }))}
+                          placeholder="Select Department"
+                        />
                       </div>
                     )}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-sm">
-                      <div className="space-y-xs">
-                        <label htmlFor="signup-roll" className="text-label-md font-bold text-on-surface-variant">Roll Number</label>
-                        <input id="signup-roll" className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" placeholder="e.g. 2024CS001" value={form.roll_number} onChange={e => setForm(f => ({ ...f, roll_number: e.target.value }))} />
+                    {role === 'student' && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-sm">
+                        <div className="space-y-xs">
+                          <label htmlFor="signup-roll" className="text-label-md font-bold text-on-surface-variant">Roll Number</label>
+                          <input id="signup-roll" className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" placeholder="e.g. 2024CS001" value={form.roll_number} onChange={e => setForm(f => ({ ...f, roll_number: e.target.value }))} />
+                        </div>
+                        <div className="space-y-xs">
+                          <label htmlFor="signup-division" className="text-label-md font-bold text-on-surface-variant">Division</label>
+                          <input id="signup-division" className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" placeholder="e.g. A" value={form.division} onChange={e => setForm(f => ({ ...f, division: e.target.value }))} />
+                        </div>
                       </div>
+                    )}
+                    {role === 'student' && (
                       <div className="space-y-xs">
-                        <label htmlFor="signup-division" className="text-label-md font-bold text-on-surface-variant">Division</label>
-                        <input id="signup-division" className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md" placeholder="e.g. A" value={form.division} onChange={e => setForm(f => ({ ...f, division: e.target.value }))} />
+                        <label htmlFor="signup-year" className="text-label-md font-bold text-on-surface-variant">Year / Semester</label>
+                        <Dropdown
+                          value={form.year}
+                          onChange={val => setForm(f => ({ ...f, year: val }))}
+                          options={['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'].map(s => ({ label: `${s} Semester`, value: s }))}
+                          placeholder="Select Semester"
+                        />
                       </div>
-                    </div>
-                    <div className="space-y-xs">
-                      <label htmlFor="signup-year" className="text-label-md font-bold text-on-surface-variant">Year / Semester</label>
-                      <select
-                        id="signup-year"
-                        className="w-full h-12 px-4 bg-surface-container-low border border-outline-variant rounded-lg focus-ring text-body-md"
-                        value={form.year}
-                        onChange={e => setForm(f => ({ ...f, year: e.target.value }))}
-                      >
-                        <option value="">Select Semester</option>
-                        {['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'].map(s => (
-                          <option key={s} value={s}>{s} Semester</option>
-                        ))}
-                      </select>
-                    </div>
-                  </>
-                )}
+                    )}
                 <button type="submit" disabled={loading} className="w-full h-12 bg-primary text-on-primary font-bold rounded-lg hover:opacity-90 focus-visible:outline-2 focus-visible:outline-secondary disabled:opacity-50">
                   {loading ? 'Creating Account...' : 'Create Secure Account'}
                 </button>

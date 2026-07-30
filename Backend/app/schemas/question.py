@@ -278,6 +278,15 @@ class SuggestResponse(BaseModel):
 class GenerateEquivalentRequest(BaseModel):
     question_id: int | None = None
     count: int = 1
+    subject: str | None = None
+    topic: str | None = None
+    difficulty: str | None = None
+    question_type: str | None = None
+    question_text: str | None = None
+    options: list | None = None
+    correct_answer: str | None = None
+    marks: int | None = None
+    explanation: str | None = None
 
     @field_validator("count")
     @classmethod

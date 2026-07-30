@@ -95,6 +95,7 @@ MUMBAI_COLLEGES = [
     ("Thakur College of Engineering and Technology", "TCET", "Kandivali East, Mumbai", "Mumbai"),
     ("Maharashtra Institute of Technology", "MIT", "Chembur, Mumbai", "Mumbai"),
     ("Universal College of Engineering", "UCOE", "Vasai, Mumbai", "Mumbai"),
+    ("Mumbai Engineering College", "MEC", "Mumbai", "Mumbai"),
 
     # Navi Mumbai & Thane Region
     ("Bharati Vidyapeeth's College of Engineering", "BVCOE", "CBD Belapur, Navi Mumbai", "Mumbai"),

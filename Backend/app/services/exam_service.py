@@ -52,6 +52,22 @@ class ExamService:
                     s.submitted_at = now
                     s.assignment.status = "submitted"
                     s.assignment.submitted_at = now
+                # Also mark assignments with no session as submitted
+                for a in db.query(ExamAssignment).filter(
+                    ExamAssignment.exam_id == exam.id,
+                    ExamAssignment.status == "assigned",
+                ).all():
+                    a.status = "submitted"
+                    a.submitted_at = now
+        # Catch stale "assigned" assignments on already-completed exams
+        for a in db.query(ExamAssignment).filter(
+            ExamAssignment.status == "assigned",
+            ExamAssignment.exam_id.in_(
+                db.query(Exam.id).filter(Exam.status == "completed")
+            ),
+        ).all():
+            a.status = "submitted"
+            a.submitted_at = now
         db.commit()
 
     @staticmethod

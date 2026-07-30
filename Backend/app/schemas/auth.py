@@ -140,6 +140,13 @@ class UserResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
+    @field_validator("department", mode="before")
+    @classmethod
+    def coerce_department(cls, v):
+        if hasattr(v, "name"):
+            return v.name
+        return v
+
 
 class TokenResponse(BaseModel):
     token: str

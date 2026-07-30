@@ -90,8 +90,14 @@ export default function CreateExam({ page, setPage }) {
   useEffect(() => {
     setLoadingSubjects(true)
     teacherService.getSubjects()
-      .then(setSubjects)
-      .catch(() => setSubjects([]))
+      .then(data => {
+        console.log('Subjects loaded:', data);
+        setSubjects(Array.isArray(data) ? data : []);
+      })
+      .catch(err => {
+        console.error('Failed to load subjects:', err);
+        setSubjects([]);
+      })
       .finally(() => setLoadingSubjects(false))
   }, [])
 
@@ -137,6 +143,22 @@ export default function CreateExam({ page, setPage }) {
         next.add(id)
         setQuestionMarks(m => ({ ...m, [id]: defaultMarks || 1 }))
       }
+      return next
+    })
+  }
+
+  function toggleTopic(topicQuestions) {
+    const allSelected = topicQuestions.every(q => selectedIds.has(q.id))
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      topicQuestions.forEach(q => {
+        if (allSelected) {
+          next.delete(q.id)
+        } else {
+          next.add(q.id)
+          setQuestionMarks(m => ({ ...m, [q.id]: m[q.id] || q.marks || 1 }))
+        }
+      })
       return next
     })
   }
@@ -525,6 +547,9 @@ export default function CreateExam({ page, setPage }) {
                                         <span className="text-xs text-on-surface-variant">({topicQuestions.length})</span>
                                       </div>
                                       <div className="flex items-center gap-sm">
+                                        <button type="button" onClick={e => { e.stopPropagation(); toggleTopic(topicQuestions); }} className="text-xs font-bold text-secondary hover:text-secondary/80 transition-colors">
+                                          {selectedInTopic.length === topicQuestions.length ? 'Deselect All' : 'Select All'}
+                                        </button>
                                         {selectedInTopic.length > 0 && (
                                           <span className="text-xs bg-secondary text-white px-sm py-0.5 rounded-full">{selectedInTopic.length} selected</span>
                                         )}
